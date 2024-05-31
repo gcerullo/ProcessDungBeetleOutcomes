@@ -37,7 +37,7 @@ library(geosphere)
 library(stringr)
 
 
-# read in functions ####
+# FUNCTIONS ####
 
 
 #this function checks the number of beetles sampled at a trap ina day. If zero individuals total were sampled at a trap then 
@@ -54,7 +54,6 @@ zeroToNa <- function(x) {
   
   
 }
-
 
 #this function simulates data for a dataset where only day 4 data is missing 
 #(use this on Gian2022 data, where plantation data contains genuine zero samples (e.g. where there were no beetles in trap))
@@ -291,12 +290,13 @@ pivot_fun <- function(x){
 
 #READ IN DATA ####
 
+#DUNG BEETLE DATA ####
+
 #Gianluca 2017 data ####
 
 Primary <- read.csv("RawData/MastersPrimaryForestSites.csv") %>% cbind(habitat = "primary") %>% rename(spp = 1) 
 Logged <- read.csv("RawData/LoggedMastersSites.csv") %>% cbind(habitat = "once-logged")  %>% rename(spp = 1)
 Restored <- read.csv("RawData/MastersRestoredSites.csv") %>% cbind(habitat = "restored") %>% rename(spp = 1)
-
 #combine into a list
 mastersList <- list(Primary,Logged,Restored)
 
@@ -314,25 +314,51 @@ trond_felicity <- read.csv("RawData/FelicityTrondGianData.csv")
 
 #Trond's Data ####
 #read in Trond 2wice logged data (split by day)
-trond_2l <- read.csv("TwiceLoggedTrondData.csv") %>% slice(-1:-5)
+trond_2l <- read.csv("RawData/TwiceLoggedTrondData.csv") %>% slice(-1:-5)
 
 #Eleanor Slade's data ####
-#Read in data from Eleanor Slades 2005 BRL and Danum PhD####
-slade <- read.csv("Slade_2005_DanumBrL.csv") %>%  rename(traptype = trap, 
+#Read in data from Eleanor Slades 2005 BRL and Danum PhD
+slade <- read.csv("RawData/Slade_2005_DanumBrL.csv") %>%  rename(traptype = trap, 
                                                          trap = trapID, 
                                                          sampler = author.study) %>% 
   filter(traptype == "BPT") %>% # take only BPT Trap  
   filter(habitat == "Old-growth Forest" | habitat == "Logged Forest") # Take only OG and LF data 
 
+#Gianluca 2022 data ####
+#Primary, logged forest, restored forest and timber plantation
+gian2022 <- read.csv("RawData/DungBeetle2022DataRawDanum_SSBPlantation.csv") %>% mutate_all(as.character)
 
 
 
+#OTHER INPUTS - Read in Necessary inputs  #### 
+
+#sppName backbone ####
+#Import species-name backbone to match names for species across datasets
+allsppNameBackbone <- read.csv("Inputs/AllNamesBackbone.csv") %>% dplyr::select(-X)
+
+#GPS locations ####
+#NB need to come back to this as lots of points are certain points are missing GPS data 
+
+HistoricGPS <- read.csv("Inputs/allHistoricSites.csv") %>% dplyr::select(site,trap, Long, Lat)
+
+#add gian2022 forest point count data 
+GC2022_gps <- read.csv("Inputs/allForest2022PointLocations.csv") %>% rename(Long = X, Lat = Y) %>% 
+  dplyr::select(Long,Lat, trap, site)
+
+
+#Plantation age info ####
+plantation <- read.csv("Inputs/Plantation_Habitat_Structure.csv") %>% dplyr::select(Site,Point, Age) %>% 
+  mutate(Point = paste0("t", Point)) %>% 
+  rename(site = Site, 
+         trap = Point,
+         plantation_age = Age) 
 
 
 
+#Clean data and fill in gaps ####
 
 
-
+#Gianluca's 2017 data 
 
 #apply pivot function to the list then rbind list
 masters <- lapply(mastersList, pivot_fun) %>% rbindlist()
@@ -354,7 +380,7 @@ masters <- simulateMissingDays(masters)
 
 sum(masters$abundance)
 
-
+#Catherine's data ####
 
 #pivot the data to long format 
 
@@ -374,7 +400,6 @@ catherine <- catherine %>%
 catherine <- catherine %>% cbind(sample_year = 2019) %>% cbind(sampler = "CF")
 catherine$abundance <- as.numeric(catherine$abundance)
 
-
 #correct minor errors 
 #1. Block five in trap 74 has a random "." in it 
 catherine <- catherine %>% 
@@ -388,13 +413,12 @@ CathNoSamplling<- catherine %>% group_by(trap,site,day) %>% summarise(sum_ab = s
 #make data with all zeros nas 
 catherine <- zeroToNa(catherine)
 
-
 #simulate data for all traps not sampled
 catherine <- simulateMissingDays(catherine)
 
 sum(catherine$abundance)
 
-
+#Felicity's Data ####
 #pivot data
 
 trond_felicity <-   trond_felicity %>% pivot_longer(cols = !c(spp),
@@ -406,8 +430,6 @@ trond_felicity <-   trond_felicity %>% pivot_longer(cols = !c(spp),
     habitat == "L" ~ "once-logged", 
     habitat == "R" ~ "restored"))
 
-#now we only dplyr::select Felicity's data
-trond_felicity %>% dplyr::select(site) %>%  unique()
 
 #dplyr::select only sites sampled by Felicity (the rest of the data we have elsewhere, split by day)
 f_primary <- trond_felicity %>% filter(site %in% c("tb1","tb2","t15","t2a","rh1","rh2")) 
@@ -438,7 +460,7 @@ felicity <- felicity %>% mutate(sample_year = case_when(
 ))
 
 
-#view all zero day/trap combinations (none)
+#view all zero day/trap combinations (none - no missing days)
 FelicityNoSamplling<- felicity %>% group_by(trap,site) %>% summarise(sum_ab = sum(abundance)) %>%  
   filter(sum_ab == 0 | is.na(sum_ab))
 
@@ -447,12 +469,9 @@ FelicityNoSamplling<- felicity %>% group_by(trap,site) %>% summarise(sum_ab = su
 felicity <- splitPooledData(felicity) %>% mutate(transect = site)
 
 sum(felicity$abundance)
-#--------------------------------------------------------------------------------------------
-#TROND DATA#####
-#--------------------------------------------------------------------------------------------
 
-#read in Trond 2wice logged data (split by day)
-trond_2l <- read.csv("TwiceLoggedTrondData.csv") %>% slice(-1:-5)
+
+#Trond's data #####
 
 #READ in Trond Data 1L,Primary, restored //note I am shortcutting here and using my Master's data for Trond's restored and primary sites
 #which encompassed Trond's data, but pooled;
@@ -472,7 +491,6 @@ TrondNoSamplling<- trond %>% group_by(trap,site) %>% summarise(sum_ab = sum(abun
 
 #split pooled data by day, assigning species abundances to  
 trond <- splitPooledData(trond)
-
 
 #pivot trond 2L data
 trond_2l<- trond_2l %>% pivot_longer(cols = !c(spp),
@@ -494,18 +512,7 @@ trond <- trond %>% rbind(trond_2l)
 
 sum(trond$abundance)
 
-
-#------------------------------------------------------------
-# ELEANOR SLADE DATA ####
-#------------------------------------------------------------
-
-#Read in data from Eleanor Slades 2005 BRL and Danum PhD####
-slade <- read.csv("Slade_2005_DanumBrL.csv") %>%  rename(traptype = trap, 
-                                                         trap = trapID, 
-                                                         sampler = author.study) %>% 
-  filter(traptype == "BPT") %>% # take only BPT Trap  
-  filter(habitat == "Old-growth Forest" | habitat == "Logged Forest") # Take only OG and LF data 
-
+#Eleanor Slade's data ####
 
 slade <- slade %>%  pivot_longer(
   cols = !c(trap, sampler,site,month,year,traptype,habitat),
@@ -519,7 +526,6 @@ sladeSPP <- slade %>% dplyr::select(spp) %>% unique()
 slade <- slade %>% filter(!str_detect(site, "Fragment"))
 
 #reorder and rename #
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!! CHECK LOGGED SITES ARE ONCE-LOGGED AND NOT SALVAGE LOGGING 
 slade <- slade %>% dplyr::select(spp,habitat,abundance, site,trap,year, month,sampler) %>% 
   rename(sample_year = year) %>% 
   mutate(habitat = case_when(
@@ -537,12 +543,7 @@ names(slade)
 
 sum(slade$abundance)
 
-#------------------------------------------------------------------------------------------------
-# READ IN GIANLUCA 2022 DUNG BEETLE DATA 
-#------------------------------------------------------------------------------------------------
-gian2022 <- read.csv("DungBeetle2022DataRawDanum_SSBPlantation.csv") %>% mutate_all(as.character)
-
-
+#Gianluca's 2022 data  
 gian2022 <- gian2022 %>% pivot_longer(cols = !c(spp),
                                       names_to = c("site", "trap","day"),  # seperate "site_trap_day" into three columns..  
                                       names_sep = "_",  # 'split by presence of underscore
@@ -582,9 +583,8 @@ gian2022 <- simulate4thDay(gian2022)
 sum(gian2022$abundance, na.rm = TRUE)
 
 names(gian2022)
-#-----------------------------------------------------------------------------------------------
-# COMBINE and organise DATASET ####
-#-----------------------------------------------------------------------------------------------
+
+#Clean and combine data sets #### 
 
 #remove species that never occur in the dataset
 masters <- removeAbsentSpp(masters)
@@ -605,50 +605,42 @@ sppGian <- uniqueSpp(gian2022) #%>% rename(sppGian =1)
 #All species names
 allsppName <- rbind(sppMaster,sppCatherine,sppFelicity,sppTrond,sppSlade,sppGian) %>% unique()
 
-#Match all spp names to Eleanor names 
+#Match all spp names to Eleanor backbone names 
 matchingNames <- sppSlade %>% left_join(allsppName) %>% mutate(MatchedNames = spp) 
 nonMatchingNames <- allsppName %>% anti_join(sppSlade) %>% mutate(MatchedNames = NA )
-allsppName <- rbind(matchingNames,nonMatchingNames)
+allsppNamecurrent <- rbind(matchingNames,nonMatchingNames)
 
-#export names to make AllNamesCrossOver with matching names
-#write.csv(allsppName, "AllNamesCrossOver.csv")
+#export names to make AllNamesCrossOver with matching names, manually
+#write.csv(allsppName, "Outputs/ManuallyEditAllNamesBackbone.csv")
 
-#Import species crossover to match names for all species
-allsppName <- read.csv("AllNamesCrossOver.csv") %>% dplyr::select(-X)
+
 
 #COMBINE DATA 
-full_df <- rbind(masters,catherine,felicity,trond,slade,gian2022, fill = TRUE) %>% ungroup %>% 
-  left_join(allsppName) %>% dplyr::select(-spp) %>% rename(spp = MatchedNames)
-
+full_df <- rbind(masters,catherine,felicity,trond,slade,gian2022, fill = TRUE) %>%
+  ungroup %>% 
+  left_join(allsppNameBackbone) %>%
+  dplyr::select(-spp) %>%
+  rename(spp = MatchedNames)
 
 #add missing month data using custom function
 full_df <- addMonthData(full_df)
 
 
-
-
-
-
-#-----------------------------------------------------------------------
-#ADD gps locations ####
-#-----------------------------------------------------------------------
-newInfo <- read.csv("allHistoricSites.csv") %>% dplyr::select(site,trap, Long, Lat)
+#Add gps locations ####
+#NB need to come back to this as lots of points are certain points are missing GPS data 
 
 full_df <- full_df %>% ungroup() %>% 
   #now combine the new information with the db data, get rid of old columns and rename everything correctly 
-  left_join(newInfo, by = c("site", "trap"))
-
-#add gian2022 forest point count data 
-gianForest2022 <- read.csv("allForest2022PointLocations.csv") %>% rename(Long = X, Lat = Y) %>% 
-  dplyr::select(Long,Lat, trap, site)
-
-full_df <- full_df %>% left_join(gianForest2022, by = c("trap", "site")) %>% 
+  left_join(HistoricGPS, by = c("site", "trap"))%>%
+  left_join(GC2022_gps, by = c("trap", "site")) %>% 
   mutate(Long = coalesce(Long.x, Long.y),
          Lat = coalesce(Lat.x, Lat.y)) %>% 
   dplyr::select(!c(Long.x,Long.y,Lat.x, Lat.y))
 
 names(full_df)
-#which traps are missing GPS data?
+
+#which traps are missing GPS data? - need to come back to and fill once I get these
+#points from other folks 
 missingGPS <- full_df %>% dplyr::select(site,transect, trap,Long,Lat) %>% unique 
 
 #all spp
@@ -666,27 +658,13 @@ full_df <-   full_df %>% ungroup() %>%
 
 sum(full_df$abundance)
 
-#==========================
-##ADD in: 
-#1 time since first logging 
-#2 plantation age
-#===========================
-plantation <- read.csv("Plantation_Habitat_Structure.csv") %>% dplyr::select(Site,Point, Age) %>% 
-  mutate(Point = paste0("t", Point)) %>% 
-  rename(site = Site, 
-         trap = Point,
-         plantation_age = Age) 
+# Add time since logging and plantation age info ####
 
+#add plantation age info
 full_df <- full_df %>% ungroup %>%left_join(plantation, by = c("trap", "site")) 
 
+#Logging age info 
 
-
-Y <- full_df %>% dplyr::select(trap, site) %>% unique() 
-Z <- plantation %>% dplyr::select(trap, site,plantation_age) %>% unique()
-NN <- Z %>% left_join(Y, by = c("site", "trap"))
-
-x<- full_df %>% filter(habitat=="once-logged"|habitat=="restored") %>% dplyr::select(site) %>% unique
-#ADD IN LOGGING YEAR - NEED TO GET HOLD OF REAL DATA FOR THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!![THIS IS MAE UP ESTIMATES]
 full_df <- full_df %>%mutate(logging_year = case_when(site == "GC1L" ~ 1960,
                                                       site == "GC1L2" ~ 1989,
                                                       site == "GCR1" ~ 1989,
@@ -723,147 +701,24 @@ full_df <- full_df %>%mutate(logging_year = case_when(site == "GC1L" ~ 1960,
                                                       site == "X88E" ~ 1989, 
                                                       site == "X88H" ~ 1989))
 
-# CALCULATE TIME SINCE LOGGING...AND TIME SINCE RESTORATION...
+#calculate time since logging 
 full_df <- full_df %>% mutate(time_since_logging = sample_year - logging_year)
 
+
+#EXPORT OUTPUTS ####
 #save the master Dung beetle data 
-write.csv(full_df, "dungBeetlesForAbundanceAnalysis.csv")
-#==========================================================================
-#plot for each speces how abundance changes 24,48,72,&96 hrs after sampling [ to show Phillip]  
-#==========================================================================
-#add sampl 
-plot_df <- full_df %>% 
-  mutate(trap_hours = case_when(
-    is.na(day)~ 48, 
-    TRUE~ 24))
+write.csv(full_df, "Outputs/dungBeetlesForAbundanceAnalysis.csv")
 
-#plot data without Eleanor's dung beetles 
-#plot_df <- full_df 
-
-#call all Slade's data day two for plotting purposes (as cumulatively collected over 48hrs)
-plot_df <- plot_df %>%  
-  mutate(day = case_when(trap_hours == 48~ "d2", 
-                         TRUE~day))
-
-#summarise cumalative abundance
-d1 <- plot_df %>% filter(day =="d1") %>%   group_by(spp) %>% mutate(cum_abundance = sum(abundance)) %>% slice(1)  %>% ungroup %>% dplyr::select(spp,day,cum_abundance)
-d2 <- plot_df %>% filter(day =="d1"|day =="d2") %>%  group_by(spp) %>% mutate(cum_abundance = sum(abundance)) %>% slice(1) %>% mutate(day = "d2") %>% ungroup %>% dplyr::select(spp,day,cum_abundance)
-d3 <- plot_df %>% filter(day =="d1"|day =="d2"|day =="d3") %>%  group_by(spp) %>% mutate(cum_abundance = sum(abundance)) %>% slice(1)  %>% mutate(day = "d3")%>% ungroup %>% dplyr::select(spp,day,cum_abundance)
-d4 <- plot_df %>% filter(day =="d1"|day =="d2"|day =="d3"|day =="d4") %>% group_by(spp) %>% mutate(cum_abundance = sum(abundance)) %>% slice(1) %>% mutate(day = "d4")%>% ungroup %>% dplyr::select(spp,day,cum_abundance)
-
-plot_df <- rbind(d1,d2,d3,d4) 
-
-#filter species that we detected >100 times across the dataset 
-reg_spp <- plot_df %>% ungroup() %>% group_by(spp)  %>% filter(cum_abundance > 100) %>%dplyr::select(spp) %>% unique
-plot_df_filt <- reg_spp %>% left_join(plot_df, by = "spp", relationship = "many-to-many") %>% ungroup %>% mutate(day = factor(day, levels = c("d1", "d2", "d3", "d4")))
-
-#summary stats
-plot_df_filt <- plot_df_filt %>% group_by(spp, day) %>% 
-  summarize(
-    meanAb = mean(cum_abundance),
-    se = sd(cum_abundance)/sqrt(n()),
-    sd = sd(cum_abundance), 
-    minAb = meanAb - se, 
-    maxProp = meanAb + se)
-
-plot_df <- reg_spp %>%  left_join(plot_df, by ="spp") %>% group_by(spp, day) %>%  
-  ungroup %>% mutate(day = factor(day, levels = c("d1", "d2", "d3", "d4")))
-
-ggplot() +
-  #plt raw data
-  # geom_point(data = plot_df, aes(x = day, y = abundance), alpha = 0.1, colour = "grey90", fill = "transparent",
-  #             position = position_jitter(width = 0.1, height = 0.1),  size =1) + 
-  #plt std error
-  geom_errorbar(data = plot_df_filt, aes(x = day, y = meanAb, ymin = minAb, ymax = minAb, colour = day), width = 0.2) +
-  #plt mean
-  geom_point(data = plot_df_filt, aes(day, meanAb, colour= day), size =2)+
-  #  ylim(0,1)+
-  facet_wrap(~ spp, scales = "free_y") +
-  scale_fill_viridis_d(alpha = 0.9)+
-  labs(x = "Habitat", y = "Mean cumulative abundance") +
-  theme_bw(base_size = 13)+
-  theme(axis.text.x = element_blank(), 
-        legend.position = "bottom")
-
-
+#write master copy of Gcerullo 2022 Sampling (need to add plantation GPS points) 
+gian2022Data <- full_df %>%
+  filter(sampler == "GC" & sample_year == 2022) %>% 
+  filter(abundance > 0)
 
 
 #!!!!TO DO
 #ADD SLADE GPS POINTS 
-
 #ADD GIAN2022 PLANTATIONS GPS POINTS [need to correct plantation data]
 
-
-#----------------------------------------------------------------------
-#CARRY OUT DATA SUMMARIES ####
-#----------------------------------------------------------------------
-#how many traps per site? 
-siteSummary <- full_df %>% dplyr::select(trap,site, habitat) %>% group_by(habitat,site) %>% dplyr::select(trap) %>% unique() %>% count()
-
-#how many traps per habitat 
-siteSummary2 <- full_df %>% dplyr::select(trap,site, habitat) %>% unique %>%  group_by(habitat) %>% count()
-
-sites <- full_df %>% dplyr::select(site) %>% unique()
-
-#for each species, abundance/trap hours 
-
-#spp abundandance by habitat
-trap_hrs <- full_df %>% 
-  mutate(trap_hours = case_when(
-    is.na(day)~ 48, 
-    TRUE~ 24
-  )) %>%  dplyr::select(habitat,site,trap,day,trap_hours) %>% unique() %>% 
-  group_by(habitat) %>% 
-  summarise(hab_trap_hours = sum(trap_hours)) %>% ungroup()
-
-hab_abund <- full_df %>% group_by(spp,habitat) %>% summarise(hab_abund = sum(abundance))
-
-hab_abund <- hab_abund %>% left_join(trap_hrs, by = "habitat") %>% 
-  mutate(abundance_1hr = hab_abund/hab_trap_hours) %>% 
-  mutate(standardised_abundance = abundance_1hr * 100000) # gives us the the abundance we would expect if we sampled 100000 hours in a habitat type
-
-primaryLovers <-  hab_abund %>% group_by(spp) %>% filter(standardised_abundance ==max(standardised_abundance)) %>% filter(habitat == "primary")
-
-#reorder factor order and rename
-hab_abund<- hab_abund %>% mutate(habitat = case_when(
-  habitat == "albizia" ~ "AL", 
-  habitat == "eucalyptus" ~ "EC",
-  habitat == "restored" ~ "R", 
-  habitat == "once-logged" ~ "1L", 
-  habitat == "twice-logged" ~ "2L", 
-  habitat == "primary" ~ "P")) %>% 
-  mutate(habitat = fct_relevel(habitat, 
-                               "EC", "AL", "2L", 
-                               "R", "1L", "P")) 
-
-plot_facets <- function(x,i,j){
-  x %>% ungroup() %>% 
-    slice(i:j) %>% 
-    ggplot(aes(x = habitat, y = standardised_abundance,fill = habitat))+
-    geom_bar(stat = "identity", position=position_dodge())+
-    facet_wrap(~spp, scales = "free_y")+
-    ylab("effort_standardised_abundance")+
-    scale_fill_manual(values=c('#d73027', '#fc8d59','#fee08b', '#d9ef8b','#91cf60','#1a9850'))+
-    theme_pubr(base_size = 9)+
-    theme(axis.text.y = element_text(size = 13),
-          axis.title.y = element_text(size = 16))
-}
-
-
-p1 <- plot_facets(hab_abund, 1, 240)
-p2 <- plot_facets(hab_abund, 241, 480)
-p3 <- plot_facets(hab_abund, 481, 750)
-
-
-wide_stand <- hab_abund %>% dplyr::select(spp,habitat,standardised_abundance) %>% 
-  pivot_wider(names_from = habitat, values_from = standardised_abundance) %>%  
-  dplyr::select(spp, eucalyptus, albizia, 7,restored,4,primary) %>% 
-  rename(EC = 2, 
-         AL = 3, 
-         L2 = 4, 
-         R = 5, 
-         L1 = 6, 
-         P = 7)
 
 
 
