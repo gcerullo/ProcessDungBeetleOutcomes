@@ -345,6 +345,12 @@ HistoricGPS <- read.csv("Inputs/allHistoricSites.csv") %>% dplyr::select(site,tr
 GC2022_gps <- read.csv("Inputs/allForest2022PointLocations.csv") %>% rename(Long = X, Lat = Y) %>% 
   dplyr::select(Long,Lat, trap, site)
 
+#add Eleanor's GPS points (I don't have SAFE or selected Danum points, and some traps are inferred manually by names, so there may be slight inconsitencies in location)
+slade_GPS <- read.csv("Inputs/EleanorSladeDungBeetle_GPS_points.csv") %>% select(lat, lon, GC_ID) %>% 
+  rename(trap = GC_ID, 
+         Long = lon, 
+         Lat = lat)
+
 
 #Plantation age info ####
 plantation <- read.csv("Inputs/Plantation_Habitat_Structure.csv") %>% dplyr::select(Site,Point, Age) %>% 
@@ -631,11 +637,20 @@ full_df <- addMonthData(full_df)
 
 full_df <- full_df %>% ungroup() %>% 
   #now combine the new information with the db data, get rid of old columns and rename everything correctly 
-  left_join(HistoricGPS, by = c("site", "trap"))%>%
+ 
+  #add historic gps points 
+   left_join(HistoricGPS, by = c("site", "trap"))%>%
+  #add GC 2022 gps points 
   left_join(GC2022_gps, by = c("trap", "site")) %>% 
   mutate(Long = coalesce(Long.x, Long.y),
          Lat = coalesce(Lat.x, Lat.y)) %>% 
-  dplyr::select(!c(Long.x,Long.y,Lat.x, Lat.y))
+  dplyr::select(!c(Long.x,Long.y,Lat.x, Lat.y)) %>%
+  
+  #add eleanor gps points 
+  left_join(slade_GPS, by = "trap", relationship = "many-to-many") %>%  
+  mutate(Long = coalesce(Long.x, Long.y),
+         Lat = coalesce(Lat.x, Lat.y)) %>% 
+  dplyr::select(!c(Long.x,Long.y,Lat.x, Lat.y)) 
 
 names(full_df)
 
@@ -666,22 +681,22 @@ full_df <- full_df %>% ungroup %>%left_join(plantation, by = c("trap", "site"))
 #Logging age info 
 
 full_df <- full_df %>%mutate(logging_year = case_when(site == "GC1L" ~ 1960,
-                                                      site == "GC1L2" ~ 1989,
-                                                      site == "GCR1" ~ 1989,
+                                                      site == "GC1L2" ~ 1981,
+                                                      site == "GCR1" ~ 1981,
                                                       site == "GCR2" ~ 1991,
                                                       
-                                                      # NOT SURE WHEN LOGGING HAPPENED - ASSUME LOGGING HAPPENED IN 1989
+                                                      # if NOT SURE exact year WHEN LOGGING HAPPENED - ASSUME LOGGING HAPPENED IN 1989
                                                       
-                                                      site == "c1" ~ 1989, 
-                                                      site == "c17" ~ 1989, 
+                                                      site == "c1" ~ 1988, 
+                                                      site == "c17" ~ 1991, 
                                                       site == "c5" ~ 1989, 
-                                                      site == "c7" ~ 1989, 
-                                                      site == "Coupe81" ~ 1989, 
-                                                      site == "Coupe88" ~ 1989, 
+                                                      site == "c7" ~ 1987, 
+                                                      site == "Coupe81" ~ 1981, 
+                                                      site == "Coupe88" ~ 1988, 
                                                       site == "danum1" ~ 1989, 
                                                       site == "danum2" ~ 1989, 
-                                                      site == "l2.1" ~ 1989, 
-                                                      site == "l2.2" ~ 1989, 
+                                                      site == "l2.1" ~ 1988, 
+                                                      site == "l2.2" ~ 1988, 
                                                       site == "Malua1" ~ 1989, 
                                                       site == "Malua2" ~ 1989, 
                                                       site == "mbp1" ~ 1985, 
@@ -692,14 +707,14 @@ full_df <- full_df %>%mutate(logging_year = case_when(site == "GC1L" ~ 1960,
                                                       site == "T21" ~ 1989, 
                                                       site == "t45" ~ 1989, 
                                                       site == "t55" ~ 1989, 
-                                                      site == "T81.18" ~ 1989, 
+                                                      site == "T81.18" ~ 1981, 
                                                       site == "TNR1" ~ 1989, 
                                                       site == "TNR2" ~ 1989, 
-                                                      site == "westus1" ~ 1989, 
-                                                      site == "westus2" ~ 1989, 
+                                                      site == "westus1" ~ 1987, 
+                                                      site == "westus2" ~ 1987, 
                                                       site == "X78C" ~ 1989, 
-                                                      site == "X88E" ~ 1989, 
-                                                      site == "X88H" ~ 1989))
+                                                      site == "X88E" ~ 1988, 
+                                                      site == "X88H" ~ 1988))
 
 #calculate time since logging 
 full_df <- full_df %>% mutate(time_since_logging = sample_year - logging_year)
@@ -710,13 +725,16 @@ full_df <- full_df %>% mutate(time_since_logging = sample_year - logging_year)
 write.csv(full_df, "Outputs/dungBeetlesForAbundanceAnalysis.csv")
 
 #write master copy of Gcerullo 2022 Sampling (need to add plantation GPS points) 
-gian2022Data <- full_df %>%
+gian2022ForestData <- full_df %>%
   filter(sampler == "GC" & sample_year == 2022) %>% 
-  filter(abundance > 0)
+  filter(abundance > 0) %>%  
+  filter(!(habitat %in% c("albizia", "eucalyptus"))) %>%  
+  select(-plantation_age)
 
+write.csv(gian2022ForestData,"Outputs/2022_GianlucaForestData_Clean_Upload.csv")
 
 #!!!!TO DO
-#ADD SLADE GPS POINTS 
+#ADD  SAFE GPS POINTS 
 #ADD GIAN2022 PLANTATIONS GPS POINTS [need to correct plantation data]
 
 
