@@ -42,8 +42,7 @@ names(df)
 df %>% filter(sampler %in% c("Slade_et al_2011", "SAFE_2018", "SAFE_2011", "SAFE_2015")) %>%  
   dplyr::select(trap) %>% unique %>% count
 
-# #ADD TRAIT DATA  ####
-# #obsolete
+# Obsolete: add trait data  ####
 # traits <- read.csv("Inputs/sppTraits.csv")  
 # df <- df %>% left_join(traits, by = "spp")
 # #body size (body length small: <10 mm; medium: 10–20 mm; and large: >20 mm)) and diel (diurnal/nocturnal)
