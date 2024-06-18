@@ -429,807 +429,807 @@ saveRDS(output, "R_code/AllOutcomesFigure/Data/OG_baseline_dungBeetles.rds")
 
 #--------------
 
-
-
-
-
-
-
-
-#---- Calculate Prop OG in scenario ----
-
-#get the amount of hab in each starting landscape 
-primaryInStart <- all_start_landscape %>% filter(habitat == "primary") %>%  
-  rename(SL_primary_parcels = num_parcels) %>% dplyr::select(-habitat)
-habInStart <- all_start_landscape %>% select(scenarioStart) %>% unique() %>% 
-  mutate(originalOG = c(1,0.2,0.2,0.8,0.2,0.2), 
-         original1L = c(0,0.8,0,0,0.6,0), 
-         original2L = c(0,0,0.8,0,0,0.6))
-
-
-#build a function that calculates proportion of remaining habitat 
-#in each scenario 
-
-prop_OG_fun <- function(x){
-  
-  #proportion of TOTAL landscape [1000 parcels] in different habitat type 
-  x %>% group_by(index, production_target) %>% 
-    #total OG
-    mutate(propOG = sum(num_parcels[habitat == "primary"])/1000,
-           propPlant = sum(num_parcels[habitat %in% c("eucalyptus_current", "albizia_current", "albizia_future","eucalyptus_future")])/1000,   
-           #prop-1L in the scenario landscape
-           prop1L = sum(num_parcels[habitat == "once-logged"])/1000,
-           #proportion of 2-L in the scenario landscape
-           prop2L = sum(num_parcels[habitat == "twice-logged"])/1000) %>%  
-    
-    #get starting landscape
-    mutate(scenarioStart = scenarioName) %>% 
-    mutate(scenarioStart = str_remove(scenarioStart, "_IY_ND.csv")) %>%
-    mutate(scenarioStart = str_remove(scenarioStart, "_CY_ND.csv")) %>%
-    mutate(scenarioStart = str_remove(scenarioStart, "_IY_D.csv")) %>%
-    mutate(scenarioStart = str_remove(scenarioStart, "_CY_D.csv")) %>% 
-    ungroup %>% 
-    
-    #get total amount of each habitat in STARTING landscape for a scenario
-    left_join(habInStart, by = "scenarioStart") %>% 
-    
-    #calculate PROPORTION of REMAINING original habitat type 
-    #(nb there can actually be more once-logged or twice-logged forest in scenario than scenarioStart, if primary forest is logged)
-    mutate(remainingOG = propOG/originalOG, 
-           remaining1L = prop1L/original1L, 
-           remaining2L = prop2L/original2L) %>%  
-    #correct for INF values for if dividing by 0
-    mutate_at(vars(remainingOG, remaining1L, remaining2L), ~ ifelse(is.infinite(.) | is.nan(.), 0, .)) %>%
-    
-    select(index, production_target, scenarioName,scenarioStart,
-           propOG, propPlant,prop1L,prop2L,
-           remainingOG,remaining1L,remaining2L) %>% unique()
-  
-}
-
-propOGcomp <- prop_OG_fun(scenario_composition) %>% ungroup
-
-#for each scenario, add the proportion starting landscapes
-propOGcomp_dt <- as.data.table(propOGcomp)
-geom_results <- as.data.table(final_geoms)
-
-#if index is numeric make character
-geom_results <- geom_results[, index := as.character(index)]
-geom_results <- geom_results[, production_target := as.numeric(production_target)]
-propOGcomp_dt <- propOGcomp_dt[, index := as.character(index)]
-propOGcomp_dt <- propOGcomp_dt[, production_target := as.numeric(production_target)]
-
-geom_results_df <- propOGcomp_dt[geom_results, on = .(index, production_target)] 
-
-
-#---------- #BIVARIATE PLOTTING PARAMETRES --------------------
-
-library(biscale)
-COL <- "DkBlue2" # define colour pallete
-COL <- "BlueOr"
-#get colours for bivariate plotting
-biv_pallete <- bi_pal(COL, dim =4 ) # for plotting
-cols <- data.frame(bi_pal(COL, dim = 4, preview = FALSE))
-colnames(cols) <- c("hex")
-cols <- cols %>% mutate(bi_class = rownames(.))
-
-textSize  <- 15
-
-#make bivar legend
-primary_legend <- bi_legend(pal = "BlueOr", dim = 4, 
-                            xlab = "Proportion old-growth", 
-                            ylab = "Proportion once-logged", size = textSize)
-
-onceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
-                          xlab = "Proportion remaining old-growth", 
-                          ylab = "Proportion remainng once-logged",size = textSize)
-
-twiceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
-                           xlab = "Proportion remaining old-growth", 
-                           ylab = "Proportion remainng twice-logged",size = textSize)
-
-all_legend <- plot_grid(primary_legend,onceL_legend,twiceL_legend, ncol =3)
-
-#assign scenarios the colours from the bivariate plot for primary start
-bivariate_colours_PRIM <- function(X){
-  X %>%  bi_class(x = propOG, y = prop1L, dim = 4, style = "equal") %>%  
-    left_join(cols, by = "bi_class") # add hex colours
-}
-geom_results_df<- bivariate_colours_PRIM(geom_results_df) %>% rename(hexP = hex)
-
-#assign scenarios the colours from the bivariate plot for mostly 1L start
-bivariate_colours_1L <- function(X){
-  X %>%  bi_class(x = remainingOG, y = remaining1L, dim = 4, style = "equal") %>%  
-    left_join(cols, by = "bi_class") # add hex colours
-}
-geom_results_df<- bivariate_colours_1L(geom_results_df) %>% rename(hex1L = hex)
-
-#assign scenarios the colours from the bivariate plot for mostly 2L start
-bivariate_colours_2L <- function(X){
-  X %>%  bi_class(x = remainingOG, y = remaining2L, dim = 4, style = "equal") %>%  
-    left_join(cols, by = "bi_class") # add hex colours
-}
-geom_results_df<- bivariate_colours_2L(geom_results_df) %>% rename(hex2L = hex)
-
-#hex shows colours for 1L vs primary.
-#hex_2L shows colours for 2L vs primary
-
-
-# final_carbon_df_4DR <- bi_class(final_carbon_df_4DR, x = propOriginalOG, y = prop1L, dim = 4, style = "equal") %>%  
-#   left_join(cols, by = "bi_class") # add hex colours
-
-#================= build some summary plts ==========================================================
-
-#filter by category
-legend_plot <-  geom_results_df %>% filter(spp_category == "loser" & scenarioName == "all_primary_CY_D.csv") 
-losers <- geom_results_df %>% filter(spp_category == "loser") 
-intermediate1L <- geom_results_df %>% filter(spp_category == "intermediate1L") 
-intermediate2L <- geom_results_df %>% filter(spp_category == "intermediate2L") 
-winners <-  geom_results_df %>% filter(spp_category == "winner") 
-
-
-
-scenario_filters <- c("all_primary_CY_D.csv")#, "mostly_1L_CY_D.csv", "mostly_2L_CY_D.csv")
-
-
-
-#build PLOTTING FUNCTION #### 
-plot_fun <- function(x){
-  
-  x <- x %>%
-    filter(scenarioName %in% scenario_filters)
-  
-  #if scenario contains plantation add cross 
-  x <- x %>%
-    mutate(is_cross = ifelse(propPlant > 0, "Cross", "Point"))
-  
-  
-  max_propPlant <- max(x$propPlant, na.rm = TRUE)
-  
-  
-  #reorder facet order 
-  
-  x$scenarioName <- factor(x$scenarioName, levels = c(
-    "all_primary_CY_D.csv"))#,
-  #"all_primary_CY_ND.csv","all_primary_IY_D.csv", "all_primary_IY_ND.csv",
-  ##"mostly_1L_CY_D.csv",
-  #"mostly_1L_CY_ND.csv", "mostly_1L_IY_D.csv", "mostly_1L_IY_ND.csv",
-  #"mostly_1L_deforested_CY_D.csv", "mostly_1L_deforested_CY_ND.csv", "mostly_1L_deforested_IY_D.csv", "mostly_1L_deforested_IY_ND.csv", 
-  #"mostly_2L_CY_D.csv"))
-  #"mostly_2L_CY_ND.csv", "mostly_2L_IY_D.csv", "mostly_2L_IY_ND.csv",
-  #"mostly_2L_deforested_CY_D.csv", "mostly_2L_deforested_CY_ND.csv", "mostly_2L_deforested_IY_D.csv","mostly_2L_deforested_IY_ND.csv",
-  #"primary_deforested_CY_D.csv", "primary_deforested_CY_ND.csv", "primary_deforested_IY_D.csv","primary_deforested_IY_ND.csv"))
-  
-  
-  x %>%  ggplot(aes(x = production_target, y = medianRelativeOccupancy))+
-    
-    # conditionally colour so that if we plot bivariate between proportion of primary and proportion of least logged (either 1L or 2L depending on starting landscape) in the scenario    
-    geom_point(aes(
-      x = production_target,
-      # y = geom_mean,
-      y = medianRelativeOccupancy,
-      colour = case_when(
-        scenarioStart %in% c("all_primary", "primary_deforested") ~ hexP,
-        #  scenarioStart %in% c("mostly_1L", "mostly_1L_deforested") ~ hex1L,
-        #  scenarioStart %in% c("mostly_2L", "mostly_2L_deforested") ~ hex2L
-      ),
-      shape = is_cross, 
-    ), position = position_jitter(width = 0.05, height = -0.03)) +
-    scale_colour_identity()+
-    #GIVE CORSSES TO PLANTATION CONTAINING SCENAIOS ####
-  scale_shape_manual(values = c("Point" = 19, "Cross" = 3)) + # Define shape mapping
-    #scale_size_continuous(range = c(3, 8), breaks = seq(0, max_propPlant, by = 0.05)) + # Adjust size range and breaks
-    
-    xlim(0, 1)+
-    xlab("Production target")+
-    ylab(   "Median relative abundance 
-  (averaged over posterior draws)")+
-    
-    #labs(colour = "Proportion of remaining old-growth forest spared")+
-    # labs(colour = "Proportion of plantation in remaining landscape")+
-    
-    facet_wrap(~scenarioName, ncol = 4)+
-    #   geom_hline(aes(yintercept = SL_geom_mean))+
-    theme_bw(base_size = textSize)+
-    theme(legend.position = "none")
-  
-}
-
-
-#get legend
-legend_plot <- plot_fun(legend_plot)
-legend <- get_legend(legend_plot + theme(legend.position = "bottom",         # c(0.5, 0.15),
-                                         legend.spacing.x = unit(1.0, 'cm'),
-                                         legend.title  = element_text(size  = 30, face = "bold"))) 
-#plot figures (without legends)
-losers <- plot_fun(losers)
-intermediate1L <- plot_fun(intermediate1L)
-intermediate2L <- plot_fun(intermediate2L)
-winners <- plot_fun(winners)
-
-#add legend function
-add_legend <-  function(x){
-  plot_grid(x, legend, 
-            nrow =2 , ncol = 1,
-            rel_heights = c(1, 0.1))
-} 
-
-#plot final figs for each above-defined category 
-add_legend(losers)
-plot_grid(losers, all_legend, nrow =2)
-add_legend(intermediate1L)
-plot_grid(intermediate1L, all_legend, nrow =2)
-add_legend(intermediate2L)
-plot_grid(intermediate2L, all_legend, nrow =2)
-add_legend(winners)
-plot_grid(winners, all_legend, nrow =2)
-
-
-#---UNUSED CODE----
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ---------------RUN ONCE -------------------------------
-#CALCULATE TIME-AVERAGED OCCUPANCY FOR EACH SCENARIO ####
-#takes 30 mins for 1-delay period 
-
-#code takes a csv file for a scenario, joins bird data and processes time-averaged biodiversity,
-#which it then stores as a csv file - RUN ONCE 
-#nb - need to rerun for different delay periods
-for (csv_file_path  in csv_files) {
-  
-  # Get a single  scenario 
-  scenario <- read.csv(csv_file_path)
-  #make scenario data table format
-  scenario <- as.data.table(scenario)
-  
-  #filter subset of harvest delays
-  scenario <- filtDelay(scenario)
-  
-  # #set the join keys to match on for merge 
-  # setkeyv(birds_10km2, c("habitat", "functionalhabAge"))
-  # setkeyv(scenario, c("functional_habitat", "functionalhabAge"))
-  
-  
-  
-  # # Join that scenarios (based on above set join keys) to bird occupancy data
-  scen_bio <- scenario[DBs_10km2,
-                       on = .(functional_habitat == habitat,
-                              functionalhabAge ==  functionalhabAge),
-                       nomatch = NA,
-                       allow.cartesian=TRUE]
-  
-  # on = c("functional_habitat" = "habitat", "functionalhabAge" = "functionalhabAge"), 
-  #  nomatch = NA]#, #if not exact match, don't join
-  #  allow.cartesian=TRUE] #allows "many-to-many" join
-  
-  # Reset keys (to remove grouping)
-  setkey(scen_bio, NULL)
-  
-  # Apply the landscape_occ function to calculate the landscape-wide occupancy of that scenario 
-  #this shows occupancy between 0-1 over the entire scenario landscape, for each species and year (0-60)
-  scen_bio_processed <- landscape_occ(scen_bio)
-  
-  #remove chunky scen_bio
-  rm(scen_bio)
-  
-  #-------------------------- apply the timed_occ function-----------------------------
-  # apply the timed_occ function to get occupancy for each scenario and species summed across 60years 
-  time_scen_bio_processed <- timed_occ(scen_bio_processed)   #this bit sums occupancy across 60 years and returns one row per scenario for time-averaged occupancy
-  # Store the processed data in the outcomes list            #REMVOVE if you want annual occupancy per species per year per scenario 
-  
-  #............... save the processed scenario as a csv  ........................
-  
-  # Define a new file name for the processed data
-  processed_csv_file_name <- paste("processed_", unique(time_scen_bio_processed$scenarioName), sep = "")
-  #make file path by combinning folder name and file name
-  processed_csv_file_path <- file.path(final_output_folder, processed_csv_file_name)
-  
-  # Save the processed data as a new CSV file
-  # ----UNCOMMENT ----
-  write.csv(time_scen_bio_processed, file = processed_csv_file_path, row.names = FALSE)
-  
-  # Remove the scenario data from memory
-  rm(scenario_data)
-  rm(processed_scenario_data)
-  
-  
-  # Print a progress message
-  cat("Processed CSV file", processed_csv_file_name, "saved.\n")
-  
-}
-
-#------------ read back in occupancy calculated through time for each scenario (currently) ----------------------------------------------
-
-# Get a list of all CSV files in the folder
-csv_files <- list.files(final_output_folder, pattern = "\\.csv$", full.names = TRUE)
-
-#make one master dataframe of all DB results
-combined_df <- data.table()
-
-# Loop through each CSV file and rbind into the combined dataframe
-for (csv_file_path in csv_files) {
-  # Read the CSV file
-  csv_data <- fread(csv_file_path)
-  
-  # rbind the data to the combined dataframe
-  combined_df <- rbind(combined_df, csv_data)
-}
-
-#====================== calculate starting landscape  time-averaged abundance ==================================================================
-
-hab_by_year <- read.csv("Tables/HabByYears.csv", strip.white = TRUE) %>%  
-  rename(true_year = year, 
-         functionalhabAge = functional_habAge, 
-         habitat = transition_habitat) %>% select(-X)
-
-#add time
-time_forSL <- hab_by_year %>% 
-  select(original_habitat, true_year) %>% unique() %>%  
-  rename(habitat = original_habitat, 
-         functionalhabAge = true_year)
-all_start_landscape <- all_start_landscape %>%
-  left_join(time_forSL, by = "habitat", relationship = "many-to-many")
-
-
-#add biodiversity
-all_start_landscape_DBs <- all_start_landscape %>% 
-  left_join(DBs_10km2, by = c("habitat","functionalhabAge"), relationship = "many-to-many")
-
-#calculate time averaged biodiversity 
-all_start_landscape_DBs  <- all_start_landscape_DBs %>%   #add columns to match function format
-  mutate(index = scenarioStart, 
-         production_target = 0,
-         original_habitat = habitat, 
-         true_year = functionalhabAge, 
-         harvest_delay = "delay 0", 
-         scenarioName = scenarioStart ) %>% 
-  as.data.table() %>% 
-  #calculate starting landscape occupancy per year and species
-  landscape_occ() %>%  
-  #calculate time-averaged occupancy 
-  timed_occ() %>%  
-  #rename to make clear this is occupancy for starting landscape 
-  mutate(SLocc_60yr = occ_60yr, 
-         SLocc_60yr_lwr = occ_60yr_lwr, 
-         SLocc_60yr_upr = occ_60yr_upr) %>% 
-  #remove unwanted columns 
-  select(-c(index, scenarioName,occ_60yr,occ_60yr_lwr,occ_60yr_upr, production_target))  
-
-#Join each scenario to the relevant starting landscape occupancy ####
-combined_df <- combined_df[all_start_landscape_DBs, on = .(species, scenarioStart)] %>% 
-  #remove scenarios with producion target of zero 
-  filter(!production_target == 0)
-
-# ------ save output -------------- 
-write.csv(combined_df, "R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/masterDungBeeetleOutcomes_df.csv")
-
-
-
-#---------- CAN START AGAIN HERE -------------------- 
-setwd("C:/Users/Gianluca Cerullo/OneDrive - University of Cambridge/PhD/Chapter_4_Borneo/CompleteFolder")
-
-#read in all dung beetle outcomes, calculated for each scenario
-combined_df <- read.csv("R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/masterDungBeeetleOutcomes_df.csv") 
-
-#read in 10km2 abundance outcomes 
-DBs_10km2 <- read.csv("R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/DBs_10km2.csv")
-
-
-# ------ Summarise winner, loser, intermediate sppp ----------
-#based abudance in different habitat tpyes 
-
-#at the moment we are selecting losers so that if occupancy is higher at ANY age of logging, then 
-#the species is not a loser. 
-losers <- DBs_10km2 %>%  group_by(species)  %>%  
-  #filter(true_age < 20 ) %>% 
-  filter(parcel_occ == max(parcel_occ)) %>% 
-  mutate(spp_category = case_when(habitat =="primary" ~"loser", TRUE ~ NA_character_)) %>% 
-  filter(spp_category == "loser") %>% select(species,spp_category) %>% unique()
-
-
-intermediates <- DBs_10km2 %>%  group_by(species) %>% 
-  #filter(true_age < 20 ) %>% 
-  filter(parcel_occ == max(parcel_occ)) %>% 
-  mutate(spp_category = case_when(habitat =="once-logged" ~"intermediate",
-                                  habitat == "twice-logged" ~ "intermediate", 
-                                  habitat == "restored" ~ "intermediate",
-                                  TRUE ~ NA_character_)) %>% 
-  filter(spp_category == "intermediate") %>% select(species,spp_category) %>% unique
-
-
-winners <- DBs_10km2 %>%
-  group_by(species) %>%
-  filter(parcel_occ == max(parcel_occ)) %>%
-  mutate(spp_category = case_when(
-    habitat == "albizia_current" ~ "winner",
-    habitat == "eucalyptus_current" ~ "winner",
-    TRUE ~ NA_character_
-  )) %>% 
-  filter(spp_category == "winner") %>% select(species,spp_category) %>% unique()
-
-#spp categories 
-winner_loser <- rbind(losers,intermediates,winners) %>% ungroup
-
-#===========   join species category information for each scenario      ============================================================= 
-
-add_spp_inf <- function(x){
-  x %>%  left_join(winner_loser, by = "species")
-}
-
-combined_df <- add_spp_inf(combined_df)
-
-#============================  Calculate the  geometric mean with errors   =============================================
-# Calculate the  geometric mean with errors
-
-
-
-#1. calculate relative occupancy (occupancy in scenario landscape versus in starting landscape
-#NB calculating delta_occupancy(the difference in time-averaged occupancy between starting landscape and scenario landscape) results in many negative values (as higher occ in scenrio landscape) which means you can't take geometric mean (as you can't log a negative value)
-rel_occ <- function(x){
-  x %>% 
-    #calculate 
-    mutate(rel_occ  = occ_60yr/ SLocc_60yr
-    ) %>%  
-    #APPLY CAP ON RELATIVE ABUNDANCE SO THAT IT CAN'T BE > THAN CAP TIMES STARTING LANDSCAPE OCCUPANCY
-    mutate(rel_occ = ifelse(rel_occ > cap, cap, rel_occ)) %>%  
-    
-    #CALCULATE ERROR
-    
-    #THIS is the individual error for a specific species comparing starting landscape versus scenario landscape
-    mutate(errorSL = sqrt(
-      ( 
-        #calcaulate total error for starting landscape for a given species 
-        abs(SLocc_60yr - SLocc_60yr_upr)^2 + abs(SLocc_60yr - SLocc_60yr_lwr)^2) 
-    )/2 
-    ) %>%  
-    #calcaulate total error for scenario landscape for a given species 
-    mutate(errorScen = sqrt(
-      (
-        abs(occ_60yr - occ_60yr_upr)^2 + abs(occ_60yr - occ_60yr_lwr)^2)
-    )/2
-    )
-  
-}
-
-combined_df <- rel_occ(combined_df)
-
-#The geometric mean function incorporates two types of error:
-#1. Species-level error, which is the error associated with calculating occupancy for the starting and scenario landscape for a given species
-#2. Geometric mean error, which is the error from taking a mean over diferent species with different errors
-
-#note; we use weighted geometric means as this means that we weight species where we are less sure of species-level occupancy less strongly
-geom_means <- function(x){
-  x %>% group_by(index, spp_category)  %>%  
-    mutate(
-      
-      #calculate the geometric mean of relative occupancy (the difference in time-averaged occupancy between starting landscape and scenario landscape)
-      #scenario geom mean and error 
-      geom_mean = exp(mean(log(rel_occ))),
-      
-      #calculate nrows in geom_mean calculation (equivalent to num species in the subset)
-      nrows_geom_mean = n(),
-      
-      #calculate the error of calculatinng spp error between starting landscpape and scenario landscape 
-      sppError = sqrt(
-        (errorScen^2+ errorSL^2)/2
-      ),
-      
-      #calcluate arithmetic mean of relative occupancy 
-      arith_mean = mean(rel_occ)
-      
-      #calculate the erorr from calculating geometric mean across species with different errors   
-    ) %>% 
-    mutate(
-      # multSppsd = sd(rel_occ),
-      geomError = geom_mean *   (
-        (prod(sppError / geom_mean))
-        ^(1/nrows_geom_mean)     )
-    ) %>% 
-    
-    mutate(
-      # Calculate the weighted geometric mean using the reciprocal of the square of the species-specific errors as weights
-      weighted_geom_mean = exp(sum(log(rel_occ) / sppError^2) / sum(1 / sppError^2)),
-      
-      # Calculate the error from calculating weighted geometric mean across species
-      weighted_geomError = weighted_geom_mean * (
-        prod(sppError / weighted_geom_mean) ^ (1 / nrows_geom_mean)
-      )
-    ) %>% 
-    
-    #NEED TO INPUT HOW TO
-    slice(1) %>%  
-    dplyr::select(index, spp_category, geom_mean,arith_mean,scenarioName,production_target,
-                  sppError,geomError, nrows_geom_mean,weighted_geom_mean,weighted_geomError)
-}
-geom_results <- geom_means(combined_df)
-
-#=========================    Summarise the composition of scenarios (proportion of forest) ==================================================
-
-#get the amount of hab in each starting landscape 
-primaryInStart <- all_start_landscape %>% filter(habitat == "primary") %>%  
-  rename(SL_primary_parcels = num_parcels) %>% dplyr::select(-habitat)
-habInStart <- all_start_landscape %>% select(scenarioStart) %>% unique() %>% 
-  mutate(originalOG = c(1,0.2,0.2,0.8,0.2,0.2), 
-         original1L = c(0,0.8,0,0,0.6,0), 
-         original2L = c(0,0,0.8,0,0,0.6))
-
-
-prop_OG_fun <- function(x){
-  
-  #proportion of TOTAL landscape [1000 parcels] in different habitat type 
-  x %>% group_by(index, production_target) %>% 
-    #total OG
-    mutate(propOG = sum(num_parcels[habitat == "primary"])/1000,
-           propPlant = sum(num_parcels[habitat %in% c("eucalyptus_current", "albizia_current", "albizia_future","eucalyptus_future")])/1000,   
-           #prop-1L in the scenario landscape
-           prop1L = sum(num_parcels[habitat == "once-logged"])/1000,
-           #proportion of 2-L in the scenario landscape
-           prop2L = sum(num_parcels[habitat == "twice-logged"])/1000) %>%  
-    
-    #get starting landscape
-    mutate(scenarioStart = scenarioName) %>% 
-    mutate(scenarioStart = str_remove(scenarioStart, "_IY_ND.csv")) %>%
-    mutate(scenarioStart = str_remove(scenarioStart, "_CY_ND.csv")) %>%
-    mutate(scenarioStart = str_remove(scenarioStart, "_IY_D.csv")) %>%
-    mutate(scenarioStart = str_remove(scenarioStart, "_CY_D.csv")) %>% 
-    ungroup %>% 
-    
-    #get total amount of each habitat in STARTING landscape for a scenario
-    left_join(habInStart, by = "scenarioStart") %>% 
-    
-    #calculate PROPORTION of REMAINING original habitat type 
-    #(nb there can actually be more once-logged or twice-logged forest in scenario than scenarioStart, if primary forest is logged)
-    mutate(remainingOG = propOG/originalOG, 
-           remaining1L = prop1L/original1L, 
-           remaining2L = prop2L/original2L) %>%  
-    #correct for INF values for if dividing by 0
-    mutate_at(vars(remainingOG, remaining1L, remaining2L), ~ ifelse(is.infinite(.) | is.nan(.), 0, .)) %>%
-    
-    select(index, production_target, scenarioName,scenarioStart,
-           propOG, propPlant,prop1L,prop2L,
-           remainingOG,remaining1L,remaining2L) %>% unique()
-  
-}
-
-propOGcomp <- prop_OG_fun(scenario_composition) %>% ungroup
-
-#for each scenario, add the proportion starting landscapes
-propOGcomp_dt <- as.data.table(propOGcomp)
-geom_results <- as.data.table(geom_results)
-geom_results_df <- propOGcomp_dt[geom_results, on = .(index, production_target,scenarioName)] 
-
-
-
-#----------    BIVARIATE PLOTTING PARAMETRES--------------------
-
-library(biscale)
-COL <- "DkBlue2" # define colour pallete
-COL <- "BlueOr"
-#get colours for bivariate plotting
-biv_pallete <- bi_pal(COL, dim =4 ) # for plotting
-cols <- data.frame(bi_pal(COL, dim = 4, preview = FALSE))
-colnames(cols) <- c("hex")
-cols <- cols %>% mutate(bi_class = rownames(.))
-
-textSize  <- 15
-
-#make bivar legend
-primary_legend <- bi_legend(pal = "BlueOr", dim = 4, 
-                            xlab = "Proportion old-growth", 
-                            ylab = "Proportion once-logged", size = textSize)
-
-onceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
-                          xlab = "Proportion remaining old-growth", 
-                          ylab = "Proportion remainng once-logged",size = textSize)
-
-twiceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
-                           xlab = "Proportion remaining old-growth", 
-                           ylab = "Proportion remainng twice-logged",size = textSize)
-
-all_legend <- plot_grid(primary_legend,onceL_legend,twiceL_legend, ncol =3)
-
-#assign scenarios the colours from the bivariate plot for primary start
-bivariate_colours_PRIM <- function(X){
-  X %>%  bi_class(x = propOG, y = prop1L, dim = 4, style = "equal") %>%  
-    left_join(cols, by = "bi_class") # add hex colours
-}
-geom_results_df<- bivariate_colours_PRIM(geom_results_df) %>% rename(hexP = hex)
-
-#assign scenarios the colours from the bivariate plot for mostly 1L start
-bivariate_colours_1L <- function(X){
-  X %>%  bi_class(x = remainingOG, y = remaining1L, dim = 4, style = "equal") %>%  
-    left_join(cols, by = "bi_class") # add hex colours
-}
-geom_results_df<- bivariate_colours_1L(geom_results_df) %>% rename(hex1L = hex)
-
-#assign scenarios the colours from the bivariate plot for mostly 2L start
-bivariate_colours_2L <- function(X){
-  X %>%  bi_class(x = remainingOG, y = remaining2L, dim = 4, style = "equal") %>%  
-    left_join(cols, by = "bi_class") # add hex colours
-}
-geom_results_df<- bivariate_colours_2L(geom_results_df) %>% rename(hex2L = hex)
-#hex shows colours for 1L vs primary.
-#hex_2L shows colours for 2L vs primary
-
-
-# final_carbon_df_4DR <- bi_class(final_carbon_df_4DR, x = propOriginalOG, y = prop1L, dim = 4, style = "equal") %>%  
-#   left_join(cols, by = "bi_class") # add hex colours
-
-#======================= #build some summary plts: ====================================================
-
-
-#filter by category
-legend_plot <-  geom_results_df %>% filter(spp_category == "loser" & scenarioName == "all_primary_CY_D.csv") 
-losers <- geom_results_df %>% filter(spp_category == "loser") 
-intermediate <- geom_results_df %>% filter(spp_category == "intermediate") 
-winners <-  geom_results_df %>% filter(spp_category == "winner") 
-
-#==========================#
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~
-scenario_filters <- c("all_primary_CY_D.csv", "mostly_1L_CY_D.csv", "mostly_2L_CY_D.csv")
-
-#build plotting function
-plot_fun <- function(x){
-  
-  x <- x %>%
-    filter(scenarioName %in% scenario_filters)
-  
-  
-  
-  #reorder facet order 
-  
-  x$scenarioName <- factor(x$scenarioName, levels = c(
-    "all_primary_CY_D.csv",
-    #"all_primary_CY_ND.csv","all_primary_IY_D.csv", "all_primary_IY_ND.csv",
-    "mostly_1L_CY_D.csv",
-    #"mostly_1L_CY_ND.csv", "mostly_1L_IY_D.csv", "mostly_1L_IY_ND.csv",
-    #"mostly_1L_deforested_CY_D.csv", "mostly_1L_deforested_CY_ND.csv", "mostly_1L_deforested_IY_D.csv", "mostly_1L_deforested_IY_ND.csv", 
-    "mostly_2L_CY_D.csv"))
-  #"mostly_2L_CY_ND.csv", "mostly_2L_IY_D.csv", "mostly_2L_IY_ND.csv",
-  #"mostly_2L_deforested_CY_D.csv", "mostly_2L_deforested_CY_ND.csv", "mostly_2L_deforested_IY_D.csv","mostly_2L_deforested_IY_ND.csv",
-  #"primary_deforested_CY_D.csv", "primary_deforested_CY_ND.csv", "primary_deforested_IY_D.csv","primary_deforested_IY_ND.csv"))
-  
-  
-  x %>%  ggplot(aes(x = production_target, y = weighted_geom_mean))+
-    # conditionally colour so that if we plot bivariate between proportion of primary and proportion of least logged (either 1L or 2L depending on starting landscape) in the scenario    
-    geom_point(aes(
-      x = production_target,
-      y = weighted_geom_mean,
-      colour = case_when(
-        scenarioStart %in% c("all_primary", "primary_deforested") ~ hexP,
-        scenarioStart %in% c("mostly_1L", "mostly_1L_deforested") ~ hex1L,
-        scenarioStart %in% c("mostly_2L", "mostly_2L_deforested") ~ hex2L
-      )
-    ), position = position_jitter(width = 0.05, height = -0.03)) +
-    scale_colour_identity()+
-    
-    xlim(0, 1)+
-    xlab("Production target")+
-    ylab("Weighted geometric mean change")+
-    
-    #labs(colour = "Proportion of remaining old-growth forest spared")+
-    # labs(colour = "Proportion of plantation in remaining landscape")+
-    
-    facet_wrap(~scenarioName, ncol = 4)+
-    #   geom_hline(aes(yintercept = SL_geom_mean))+
-    theme_bw(base_size = textSize)+
-    theme(legend.position = "none")
-  
-}
-
-#get legend
-legend_plot <- plot_fun(legend_plot)
-legend <- get_legend(legend_plot + theme(legend.position = "bottom",         # c(0.5, 0.15),
-                                         legend.spacing.x = unit(1.0, 'cm'),
-                                         legend.title  = element_text(size  = 30, face = "bold"))) 
-#plot figures (without legends)
-losers <- plot_fun(losers)
-intermediate <- plot_fun(intermediate)
-winners <- plot_fun(winners)
-
-#add legend function
-add_legend <-  function(x){
-  plot_grid(x, legend, 
-            nrow =2 , ncol = 1,
-            rel_heights = c(1, 0.1))
-} 
-
-#-------------------- PLOT FINAL FIGURES ----------------------------------------
-#plot final figs for each above-defined category 
-add_legend(losers)
-plot_grid(losers, all_legend, nrow =2)
-add_legend(intermediate)
-plot_grid(intermediate, all_legend, nrow =2)
-add_legend(winners)
-plot_grid(winners, all_legend, nrow =2)
-
-
-
-
-
-
-
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# #---- Calculate Prop OG in scenario ----
+# 
+# #get the amount of hab in each starting landscape 
+# primaryInStart <- all_start_landscape %>% filter(habitat == "primary") %>%  
+#   rename(SL_primary_parcels = num_parcels) %>% dplyr::select(-habitat)
+# habInStart <- all_start_landscape %>% select(scenarioStart) %>% unique() %>% 
+#   mutate(originalOG = c(1,0.2,0.2,0.8,0.2,0.2), 
+#          original1L = c(0,0.8,0,0,0.6,0), 
+#          original2L = c(0,0,0.8,0,0,0.6))
+# 
+# 
+# #build a function that calculates proportion of remaining habitat 
+# #in each scenario 
+# 
+# prop_OG_fun <- function(x){
+#   
+#   #proportion of TOTAL landscape [1000 parcels] in different habitat type 
+#   x %>% group_by(index, production_target) %>% 
+#     #total OG
+#     mutate(propOG = sum(num_parcels[habitat == "primary"])/1000,
+#            propPlant = sum(num_parcels[habitat %in% c("eucalyptus_current", "albizia_current", "albizia_future","eucalyptus_future")])/1000,   
+#            #prop-1L in the scenario landscape
+#            prop1L = sum(num_parcels[habitat == "once-logged"])/1000,
+#            #proportion of 2-L in the scenario landscape
+#            prop2L = sum(num_parcels[habitat == "twice-logged"])/1000) %>%  
+#     
+#     #get starting landscape
+#     mutate(scenarioStart = scenarioName) %>% 
+#     mutate(scenarioStart = str_remove(scenarioStart, "_IY_ND.csv")) %>%
+#     mutate(scenarioStart = str_remove(scenarioStart, "_CY_ND.csv")) %>%
+#     mutate(scenarioStart = str_remove(scenarioStart, "_IY_D.csv")) %>%
+#     mutate(scenarioStart = str_remove(scenarioStart, "_CY_D.csv")) %>% 
+#     ungroup %>% 
+#     
+#     #get total amount of each habitat in STARTING landscape for a scenario
+#     left_join(habInStart, by = "scenarioStart") %>% 
+#     
+#     #calculate PROPORTION of REMAINING original habitat type 
+#     #(nb there can actually be more once-logged or twice-logged forest in scenario than scenarioStart, if primary forest is logged)
+#     mutate(remainingOG = propOG/originalOG, 
+#            remaining1L = prop1L/original1L, 
+#            remaining2L = prop2L/original2L) %>%  
+#     #correct for INF values for if dividing by 0
+#     mutate_at(vars(remainingOG, remaining1L, remaining2L), ~ ifelse(is.infinite(.) | is.nan(.), 0, .)) %>%
+#     
+#     select(index, production_target, scenarioName,scenarioStart,
+#            propOG, propPlant,prop1L,prop2L,
+#            remainingOG,remaining1L,remaining2L) %>% unique()
+#   
+# }
+# 
+# propOGcomp <- prop_OG_fun(scenario_composition) %>% ungroup
+# 
+# #for each scenario, add the proportion starting landscapes
+# propOGcomp_dt <- as.data.table(propOGcomp)
+# geom_results <- as.data.table(final_geoms)
+# 
+# #if index is numeric make character
+# geom_results <- geom_results[, index := as.character(index)]
+# geom_results <- geom_results[, production_target := as.numeric(production_target)]
+# propOGcomp_dt <- propOGcomp_dt[, index := as.character(index)]
+# propOGcomp_dt <- propOGcomp_dt[, production_target := as.numeric(production_target)]
+# 
+# geom_results_df <- propOGcomp_dt[geom_results, on = .(index, production_target)] 
+# 
+# 
+# #---------- #BIVARIATE PLOTTING PARAMETRES --------------------
+# 
+# library(biscale)
+# COL <- "DkBlue2" # define colour pallete
+# COL <- "BlueOr"
+# #get colours for bivariate plotting
+# biv_pallete <- bi_pal(COL, dim =4 ) # for plotting
+# cols <- data.frame(bi_pal(COL, dim = 4, preview = FALSE))
+# colnames(cols) <- c("hex")
+# cols <- cols %>% mutate(bi_class = rownames(.))
+# 
+# textSize  <- 15
+# 
+# #make bivar legend
+# primary_legend <- bi_legend(pal = "BlueOr", dim = 4, 
+#                             xlab = "Proportion old-growth", 
+#                             ylab = "Proportion once-logged", size = textSize)
+# 
+# onceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
+#                           xlab = "Proportion remaining old-growth", 
+#                           ylab = "Proportion remainng once-logged",size = textSize)
+# 
+# twiceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
+#                            xlab = "Proportion remaining old-growth", 
+#                            ylab = "Proportion remainng twice-logged",size = textSize)
+# 
+# all_legend <- plot_grid(primary_legend,onceL_legend,twiceL_legend, ncol =3)
+# 
+# #assign scenarios the colours from the bivariate plot for primary start
+# bivariate_colours_PRIM <- function(X){
+#   X %>%  bi_class(x = propOG, y = prop1L, dim = 4, style = "equal") %>%  
+#     left_join(cols, by = "bi_class") # add hex colours
+# }
+# geom_results_df<- bivariate_colours_PRIM(geom_results_df) %>% rename(hexP = hex)
+# 
+# #assign scenarios the colours from the bivariate plot for mostly 1L start
+# bivariate_colours_1L <- function(X){
+#   X %>%  bi_class(x = remainingOG, y = remaining1L, dim = 4, style = "equal") %>%  
+#     left_join(cols, by = "bi_class") # add hex colours
+# }
+# geom_results_df<- bivariate_colours_1L(geom_results_df) %>% rename(hex1L = hex)
+# 
+# #assign scenarios the colours from the bivariate plot for mostly 2L start
+# bivariate_colours_2L <- function(X){
+#   X %>%  bi_class(x = remainingOG, y = remaining2L, dim = 4, style = "equal") %>%  
+#     left_join(cols, by = "bi_class") # add hex colours
+# }
+# geom_results_df<- bivariate_colours_2L(geom_results_df) %>% rename(hex2L = hex)
+# 
+# #hex shows colours for 1L vs primary.
+# #hex_2L shows colours for 2L vs primary
+# 
+# 
+# # final_carbon_df_4DR <- bi_class(final_carbon_df_4DR, x = propOriginalOG, y = prop1L, dim = 4, style = "equal") %>%  
+# #   left_join(cols, by = "bi_class") # add hex colours
+# 
+# #================= build some summary plts ==========================================================
+# 
+# #filter by category
+# legend_plot <-  geom_results_df %>% filter(spp_category == "loser" & scenarioName == "all_primary_CY_D.csv") 
+# losers <- geom_results_df %>% filter(spp_category == "loser") 
+# intermediate1L <- geom_results_df %>% filter(spp_category == "intermediate1L") 
+# intermediate2L <- geom_results_df %>% filter(spp_category == "intermediate2L") 
+# winners <-  geom_results_df %>% filter(spp_category == "winner") 
+# 
+# 
+# 
+# scenario_filters <- c("all_primary_CY_D.csv")#, "mostly_1L_CY_D.csv", "mostly_2L_CY_D.csv")
+# 
+# 
+# 
+# #build PLOTTING FUNCTION #### 
+# plot_fun <- function(x){
+#   
+#   x <- x %>%
+#     filter(scenarioName %in% scenario_filters)
+#   
+#   #if scenario contains plantation add cross 
+#   x <- x %>%
+#     mutate(is_cross = ifelse(propPlant > 0, "Cross", "Point"))
+#   
+#   
+#   max_propPlant <- max(x$propPlant, na.rm = TRUE)
+#   
+#   
+#   #reorder facet order 
+#   
+#   x$scenarioName <- factor(x$scenarioName, levels = c(
+#     "all_primary_CY_D.csv"))#,
+#   #"all_primary_CY_ND.csv","all_primary_IY_D.csv", "all_primary_IY_ND.csv",
+#   ##"mostly_1L_CY_D.csv",
+#   #"mostly_1L_CY_ND.csv", "mostly_1L_IY_D.csv", "mostly_1L_IY_ND.csv",
+#   #"mostly_1L_deforested_CY_D.csv", "mostly_1L_deforested_CY_ND.csv", "mostly_1L_deforested_IY_D.csv", "mostly_1L_deforested_IY_ND.csv", 
+#   #"mostly_2L_CY_D.csv"))
+#   #"mostly_2L_CY_ND.csv", "mostly_2L_IY_D.csv", "mostly_2L_IY_ND.csv",
+#   #"mostly_2L_deforested_CY_D.csv", "mostly_2L_deforested_CY_ND.csv", "mostly_2L_deforested_IY_D.csv","mostly_2L_deforested_IY_ND.csv",
+#   #"primary_deforested_CY_D.csv", "primary_deforested_CY_ND.csv", "primary_deforested_IY_D.csv","primary_deforested_IY_ND.csv"))
+#   
+#   
+#   x %>%  ggplot(aes(x = production_target, y = medianRelativeOccupancy))+
+#     
+#     # conditionally colour so that if we plot bivariate between proportion of primary and proportion of least logged (either 1L or 2L depending on starting landscape) in the scenario    
+#     geom_point(aes(
+#       x = production_target,
+#       # y = geom_mean,
+#       y = medianRelativeOccupancy,
+#       colour = case_when(
+#         scenarioStart %in% c("all_primary", "primary_deforested") ~ hexP,
+#         #  scenarioStart %in% c("mostly_1L", "mostly_1L_deforested") ~ hex1L,
+#         #  scenarioStart %in% c("mostly_2L", "mostly_2L_deforested") ~ hex2L
+#       ),
+#       shape = is_cross, 
+#     ), position = position_jitter(width = 0.05, height = -0.03)) +
+#     scale_colour_identity()+
+#     #GIVE CORSSES TO PLANTATION CONTAINING SCENAIOS ####
+#   scale_shape_manual(values = c("Point" = 19, "Cross" = 3)) + # Define shape mapping
+#     #scale_size_continuous(range = c(3, 8), breaks = seq(0, max_propPlant, by = 0.05)) + # Adjust size range and breaks
+#     
+#     xlim(0, 1)+
+#     xlab("Production target")+
+#     ylab(   "Median relative abundance 
+#   (averaged over posterior draws)")+
+#     
+#     #labs(colour = "Proportion of remaining old-growth forest spared")+
+#     # labs(colour = "Proportion of plantation in remaining landscape")+
+#     
+#     facet_wrap(~scenarioName, ncol = 4)+
+#     #   geom_hline(aes(yintercept = SL_geom_mean))+
+#     theme_bw(base_size = textSize)+
+#     theme(legend.position = "none")
+#   
+# }
+# 
+# 
+# #get legend
+# legend_plot <- plot_fun(legend_plot)
+# legend <- get_legend(legend_plot + theme(legend.position = "bottom",         # c(0.5, 0.15),
+#                                          legend.spacing.x = unit(1.0, 'cm'),
+#                                          legend.title  = element_text(size  = 30, face = "bold"))) 
+# #plot figures (without legends)
+# losers <- plot_fun(losers)
+# intermediate1L <- plot_fun(intermediate1L)
+# intermediate2L <- plot_fun(intermediate2L)
+# winners <- plot_fun(winners)
+# 
+# #add legend function
+# add_legend <-  function(x){
+#   plot_grid(x, legend, 
+#             nrow =2 , ncol = 1,
+#             rel_heights = c(1, 0.1))
+# } 
+# 
+# #plot final figs for each above-defined category 
+# add_legend(losers)
+# plot_grid(losers, all_legend, nrow =2)
+# add_legend(intermediate1L)
+# plot_grid(intermediate1L, all_legend, nrow =2)
+# add_legend(intermediate2L)
+# plot_grid(intermediate2L, all_legend, nrow =2)
+# add_legend(winners)
+# plot_grid(winners, all_legend, nrow =2)
+# 
+# 
+# #---UNUSED CODE----
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# # ---------------RUN ONCE -------------------------------
+# #CALCULATE TIME-AVERAGED OCCUPANCY FOR EACH SCENARIO ####
+# #takes 30 mins for 1-delay period 
+# 
+# #code takes a csv file for a scenario, joins bird data and processes time-averaged biodiversity,
+# #which it then stores as a csv file - RUN ONCE 
+# #nb - need to rerun for different delay periods
+# for (csv_file_path  in csv_files) {
+#   
+#   # Get a single  scenario 
+#   scenario <- read.csv(csv_file_path)
+#   #make scenario data table format
+#   scenario <- as.data.table(scenario)
+#   
+#   #filter subset of harvest delays
+#   scenario <- filtDelay(scenario)
+#   
+#   # #set the join keys to match on for merge 
+#   # setkeyv(birds_10km2, c("habitat", "functionalhabAge"))
+#   # setkeyv(scenario, c("functional_habitat", "functionalhabAge"))
+#   
+#   
+#   
+#   # # Join that scenarios (based on above set join keys) to bird occupancy data
+#   scen_bio <- scenario[DBs_10km2,
+#                        on = .(functional_habitat == habitat,
+#                               functionalhabAge ==  functionalhabAge),
+#                        nomatch = NA,
+#                        allow.cartesian=TRUE]
+#   
+#   # on = c("functional_habitat" = "habitat", "functionalhabAge" = "functionalhabAge"), 
+#   #  nomatch = NA]#, #if not exact match, don't join
+#   #  allow.cartesian=TRUE] #allows "many-to-many" join
+#   
+#   # Reset keys (to remove grouping)
+#   setkey(scen_bio, NULL)
+#   
+#   # Apply the landscape_occ function to calculate the landscape-wide occupancy of that scenario 
+#   #this shows occupancy between 0-1 over the entire scenario landscape, for each species and year (0-60)
+#   scen_bio_processed <- landscape_occ(scen_bio)
+#   
+#   #remove chunky scen_bio
+#   rm(scen_bio)
+#   
+#   #-------------------------- apply the timed_occ function-----------------------------
+#   # apply the timed_occ function to get occupancy for each scenario and species summed across 60years 
+#   time_scen_bio_processed <- timed_occ(scen_bio_processed)   #this bit sums occupancy across 60 years and returns one row per scenario for time-averaged occupancy
+#   # Store the processed data in the outcomes list            #REMVOVE if you want annual occupancy per species per year per scenario 
+#   
+#   #............... save the processed scenario as a csv  ........................
+#   
+#   # Define a new file name for the processed data
+#   processed_csv_file_name <- paste("processed_", unique(time_scen_bio_processed$scenarioName), sep = "")
+#   #make file path by combinning folder name and file name
+#   processed_csv_file_path <- file.path(final_output_folder, processed_csv_file_name)
+#   
+#   # Save the processed data as a new CSV file
+#   # ----UNCOMMENT ----
+#   write.csv(time_scen_bio_processed, file = processed_csv_file_path, row.names = FALSE)
+#   
+#   # Remove the scenario data from memory
+#   rm(scenario_data)
+#   rm(processed_scenario_data)
+#   
+#   
+#   # Print a progress message
+#   cat("Processed CSV file", processed_csv_file_name, "saved.\n")
+#   
+# }
+# 
+# #------------ read back in occupancy calculated through time for each scenario (currently) ----------------------------------------------
+# 
+# # Get a list of all CSV files in the folder
+# csv_files <- list.files(final_output_folder, pattern = "\\.csv$", full.names = TRUE)
+# 
+# #make one master dataframe of all DB results
+# combined_df <- data.table()
+# 
+# # Loop through each CSV file and rbind into the combined dataframe
+# for (csv_file_path in csv_files) {
+#   # Read the CSV file
+#   csv_data <- fread(csv_file_path)
+#   
+#   # rbind the data to the combined dataframe
+#   combined_df <- rbind(combined_df, csv_data)
+# }
+# 
+# #====================== calculate starting landscape  time-averaged abundance ==================================================================
+# 
+# hab_by_year <- read.csv("Tables/HabByYears.csv", strip.white = TRUE) %>%  
+#   rename(true_year = year, 
+#          functionalhabAge = functional_habAge, 
+#          habitat = transition_habitat) %>% select(-X)
+# 
+# #add time
+# time_forSL <- hab_by_year %>% 
+#   select(original_habitat, true_year) %>% unique() %>%  
+#   rename(habitat = original_habitat, 
+#          functionalhabAge = true_year)
+# all_start_landscape <- all_start_landscape %>%
+#   left_join(time_forSL, by = "habitat", relationship = "many-to-many")
+# 
+# 
+# #add biodiversity
+# all_start_landscape_DBs <- all_start_landscape %>% 
+#   left_join(DBs_10km2, by = c("habitat","functionalhabAge"), relationship = "many-to-many")
+# 
+# #calculate time averaged biodiversity 
+# all_start_landscape_DBs  <- all_start_landscape_DBs %>%   #add columns to match function format
+#   mutate(index = scenarioStart, 
+#          production_target = 0,
+#          original_habitat = habitat, 
+#          true_year = functionalhabAge, 
+#          harvest_delay = "delay 0", 
+#          scenarioName = scenarioStart ) %>% 
+#   as.data.table() %>% 
+#   #calculate starting landscape occupancy per year and species
+#   landscape_occ() %>%  
+#   #calculate time-averaged occupancy 
+#   timed_occ() %>%  
+#   #rename to make clear this is occupancy for starting landscape 
+#   mutate(SLocc_60yr = occ_60yr, 
+#          SLocc_60yr_lwr = occ_60yr_lwr, 
+#          SLocc_60yr_upr = occ_60yr_upr) %>% 
+#   #remove unwanted columns 
+#   select(-c(index, scenarioName,occ_60yr,occ_60yr_lwr,occ_60yr_upr, production_target))  
+# 
+# #Join each scenario to the relevant starting landscape occupancy ####
+# combined_df <- combined_df[all_start_landscape_DBs, on = .(species, scenarioStart)] %>% 
+#   #remove scenarios with producion target of zero 
+#   filter(!production_target == 0)
+# 
+# # ------ save output -------------- 
+# write.csv(combined_df, "R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/masterDungBeeetleOutcomes_df.csv")
+# 
+# 
+# 
+# #---------- CAN START AGAIN HERE -------------------- 
+# setwd("C:/Users/Gianluca Cerullo/OneDrive - University of Cambridge/PhD/Chapter_4_Borneo/CompleteFolder")
+# 
+# #read in all dung beetle outcomes, calculated for each scenario
+# combined_df <- read.csv("R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/masterDungBeeetleOutcomes_df.csv") 
+# 
+# #read in 10km2 abundance outcomes 
+# DBs_10km2 <- read.csv("R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/DBs_10km2.csv")
+# 
+# 
+# # ------ Summarise winner, loser, intermediate sppp ----------
+# #based abudance in different habitat tpyes 
+# 
+# #at the moment we are selecting losers so that if occupancy is higher at ANY age of logging, then 
+# #the species is not a loser. 
+# losers <- DBs_10km2 %>%  group_by(species)  %>%  
+#   #filter(true_age < 20 ) %>% 
+#   filter(parcel_occ == max(parcel_occ)) %>% 
+#   mutate(spp_category = case_when(habitat =="primary" ~"loser", TRUE ~ NA_character_)) %>% 
+#   filter(spp_category == "loser") %>% select(species,spp_category) %>% unique()
+# 
+# 
+# intermediates <- DBs_10km2 %>%  group_by(species) %>% 
+#   #filter(true_age < 20 ) %>% 
+#   filter(parcel_occ == max(parcel_occ)) %>% 
+#   mutate(spp_category = case_when(habitat =="once-logged" ~"intermediate",
+#                                   habitat == "twice-logged" ~ "intermediate", 
+#                                   habitat == "restored" ~ "intermediate",
+#                                   TRUE ~ NA_character_)) %>% 
+#   filter(spp_category == "intermediate") %>% select(species,spp_category) %>% unique
+# 
+# 
+# winners <- DBs_10km2 %>%
+#   group_by(species) %>%
+#   filter(parcel_occ == max(parcel_occ)) %>%
+#   mutate(spp_category = case_when(
+#     habitat == "albizia_current" ~ "winner",
+#     habitat == "eucalyptus_current" ~ "winner",
+#     TRUE ~ NA_character_
+#   )) %>% 
+#   filter(spp_category == "winner") %>% select(species,spp_category) %>% unique()
+# 
+# #spp categories 
+# winner_loser <- rbind(losers,intermediates,winners) %>% ungroup
+# 
+# #===========   join species category information for each scenario      ============================================================= 
+# 
+# add_spp_inf <- function(x){
+#   x %>%  left_join(winner_loser, by = "species")
+# }
+# 
+# combined_df <- add_spp_inf(combined_df)
+# 
+# #============================  Calculate the  geometric mean with errors   =============================================
+# # Calculate the  geometric mean with errors
+# 
+# 
+# 
+# #1. calculate relative occupancy (occupancy in scenario landscape versus in starting landscape
+# #NB calculating delta_occupancy(the difference in time-averaged occupancy between starting landscape and scenario landscape) results in many negative values (as higher occ in scenrio landscape) which means you can't take geometric mean (as you can't log a negative value)
+# rel_occ <- function(x){
+#   x %>% 
+#     #calculate 
+#     mutate(rel_occ  = occ_60yr/ SLocc_60yr
+#     ) %>%  
+#     #APPLY CAP ON RELATIVE ABUNDANCE SO THAT IT CAN'T BE > THAN CAP TIMES STARTING LANDSCAPE OCCUPANCY
+#     mutate(rel_occ = ifelse(rel_occ > cap, cap, rel_occ)) %>%  
+#     
+#     #CALCULATE ERROR
+#     
+#     #THIS is the individual error for a specific species comparing starting landscape versus scenario landscape
+#     mutate(errorSL = sqrt(
+#       ( 
+#         #calcaulate total error for starting landscape for a given species 
+#         abs(SLocc_60yr - SLocc_60yr_upr)^2 + abs(SLocc_60yr - SLocc_60yr_lwr)^2) 
+#     )/2 
+#     ) %>%  
+#     #calcaulate total error for scenario landscape for a given species 
+#     mutate(errorScen = sqrt(
+#       (
+#         abs(occ_60yr - occ_60yr_upr)^2 + abs(occ_60yr - occ_60yr_lwr)^2)
+#     )/2
+#     )
+#   
+# }
+# 
+# combined_df <- rel_occ(combined_df)
+# 
+# #The geometric mean function incorporates two types of error:
+# #1. Species-level error, which is the error associated with calculating occupancy for the starting and scenario landscape for a given species
+# #2. Geometric mean error, which is the error from taking a mean over diferent species with different errors
+# 
+# #note; we use weighted geometric means as this means that we weight species where we are less sure of species-level occupancy less strongly
+# geom_means <- function(x){
+#   x %>% group_by(index, spp_category)  %>%  
+#     mutate(
+#       
+#       #calculate the geometric mean of relative occupancy (the difference in time-averaged occupancy between starting landscape and scenario landscape)
+#       #scenario geom mean and error 
+#       geom_mean = exp(mean(log(rel_occ))),
+#       
+#       #calculate nrows in geom_mean calculation (equivalent to num species in the subset)
+#       nrows_geom_mean = n(),
+#       
+#       #calculate the error of calculatinng spp error between starting landscpape and scenario landscape 
+#       sppError = sqrt(
+#         (errorScen^2+ errorSL^2)/2
+#       ),
+#       
+#       #calcluate arithmetic mean of relative occupancy 
+#       arith_mean = mean(rel_occ)
+#       
+#       #calculate the erorr from calculating geometric mean across species with different errors   
+#     ) %>% 
+#     mutate(
+#       # multSppsd = sd(rel_occ),
+#       geomError = geom_mean *   (
+#         (prod(sppError / geom_mean))
+#         ^(1/nrows_geom_mean)     )
+#     ) %>% 
+#     
+#     mutate(
+#       # Calculate the weighted geometric mean using the reciprocal of the square of the species-specific errors as weights
+#       weighted_geom_mean = exp(sum(log(rel_occ) / sppError^2) / sum(1 / sppError^2)),
+#       
+#       # Calculate the error from calculating weighted geometric mean across species
+#       weighted_geomError = weighted_geom_mean * (
+#         prod(sppError / weighted_geom_mean) ^ (1 / nrows_geom_mean)
+#       )
+#     ) %>% 
+#     
+#     #NEED TO INPUT HOW TO
+#     slice(1) %>%  
+#     dplyr::select(index, spp_category, geom_mean,arith_mean,scenarioName,production_target,
+#                   sppError,geomError, nrows_geom_mean,weighted_geom_mean,weighted_geomError)
+# }
+# geom_results <- geom_means(combined_df)
+# 
+# #=========================    Summarise the composition of scenarios (proportion of forest) ==================================================
+# 
+# #get the amount of hab in each starting landscape 
+# primaryInStart <- all_start_landscape %>% filter(habitat == "primary") %>%  
+#   rename(SL_primary_parcels = num_parcels) %>% dplyr::select(-habitat)
+# habInStart <- all_start_landscape %>% select(scenarioStart) %>% unique() %>% 
+#   mutate(originalOG = c(1,0.2,0.2,0.8,0.2,0.2), 
+#          original1L = c(0,0.8,0,0,0.6,0), 
+#          original2L = c(0,0,0.8,0,0,0.6))
+# 
+# 
+# prop_OG_fun <- function(x){
+#   
+#   #proportion of TOTAL landscape [1000 parcels] in different habitat type 
+#   x %>% group_by(index, production_target) %>% 
+#     #total OG
+#     mutate(propOG = sum(num_parcels[habitat == "primary"])/1000,
+#            propPlant = sum(num_parcels[habitat %in% c("eucalyptus_current", "albizia_current", "albizia_future","eucalyptus_future")])/1000,   
+#            #prop-1L in the scenario landscape
+#            prop1L = sum(num_parcels[habitat == "once-logged"])/1000,
+#            #proportion of 2-L in the scenario landscape
+#            prop2L = sum(num_parcels[habitat == "twice-logged"])/1000) %>%  
+#     
+#     #get starting landscape
+#     mutate(scenarioStart = scenarioName) %>% 
+#     mutate(scenarioStart = str_remove(scenarioStart, "_IY_ND.csv")) %>%
+#     mutate(scenarioStart = str_remove(scenarioStart, "_CY_ND.csv")) %>%
+#     mutate(scenarioStart = str_remove(scenarioStart, "_IY_D.csv")) %>%
+#     mutate(scenarioStart = str_remove(scenarioStart, "_CY_D.csv")) %>% 
+#     ungroup %>% 
+#     
+#     #get total amount of each habitat in STARTING landscape for a scenario
+#     left_join(habInStart, by = "scenarioStart") %>% 
+#     
+#     #calculate PROPORTION of REMAINING original habitat type 
+#     #(nb there can actually be more once-logged or twice-logged forest in scenario than scenarioStart, if primary forest is logged)
+#     mutate(remainingOG = propOG/originalOG, 
+#            remaining1L = prop1L/original1L, 
+#            remaining2L = prop2L/original2L) %>%  
+#     #correct for INF values for if dividing by 0
+#     mutate_at(vars(remainingOG, remaining1L, remaining2L), ~ ifelse(is.infinite(.) | is.nan(.), 0, .)) %>%
+#     
+#     select(index, production_target, scenarioName,scenarioStart,
+#            propOG, propPlant,prop1L,prop2L,
+#            remainingOG,remaining1L,remaining2L) %>% unique()
+#   
+# }
+# 
+# propOGcomp <- prop_OG_fun(scenario_composition) %>% ungroup
+# 
+# #for each scenario, add the proportion starting landscapes
+# propOGcomp_dt <- as.data.table(propOGcomp)
+# geom_results <- as.data.table(geom_results)
+# geom_results_df <- propOGcomp_dt[geom_results, on = .(index, production_target,scenarioName)] 
+# 
+# 
+# 
+# #----------    BIVARIATE PLOTTING PARAMETRES--------------------
+# 
+# library(biscale)
+# COL <- "DkBlue2" # define colour pallete
+# COL <- "BlueOr"
+# #get colours for bivariate plotting
+# biv_pallete <- bi_pal(COL, dim =4 ) # for plotting
+# cols <- data.frame(bi_pal(COL, dim = 4, preview = FALSE))
+# colnames(cols) <- c("hex")
+# cols <- cols %>% mutate(bi_class = rownames(.))
+# 
+# textSize  <- 15
+# 
+# #make bivar legend
+# primary_legend <- bi_legend(pal = "BlueOr", dim = 4, 
+#                             xlab = "Proportion old-growth", 
+#                             ylab = "Proportion once-logged", size = textSize)
+# 
+# onceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
+#                           xlab = "Proportion remaining old-growth", 
+#                           ylab = "Proportion remainng once-logged",size = textSize)
+# 
+# twiceL_legend <- bi_legend(pal = "BlueOr", dim = 4, 
+#                            xlab = "Proportion remaining old-growth", 
+#                            ylab = "Proportion remainng twice-logged",size = textSize)
+# 
+# all_legend <- plot_grid(primary_legend,onceL_legend,twiceL_legend, ncol =3)
+# 
+# #assign scenarios the colours from the bivariate plot for primary start
+# bivariate_colours_PRIM <- function(X){
+#   X %>%  bi_class(x = propOG, y = prop1L, dim = 4, style = "equal") %>%  
+#     left_join(cols, by = "bi_class") # add hex colours
+# }
+# geom_results_df<- bivariate_colours_PRIM(geom_results_df) %>% rename(hexP = hex)
+# 
+# #assign scenarios the colours from the bivariate plot for mostly 1L start
+# bivariate_colours_1L <- function(X){
+#   X %>%  bi_class(x = remainingOG, y = remaining1L, dim = 4, style = "equal") %>%  
+#     left_join(cols, by = "bi_class") # add hex colours
+# }
+# geom_results_df<- bivariate_colours_1L(geom_results_df) %>% rename(hex1L = hex)
+# 
+# #assign scenarios the colours from the bivariate plot for mostly 2L start
+# bivariate_colours_2L <- function(X){
+#   X %>%  bi_class(x = remainingOG, y = remaining2L, dim = 4, style = "equal") %>%  
+#     left_join(cols, by = "bi_class") # add hex colours
+# }
+# geom_results_df<- bivariate_colours_2L(geom_results_df) %>% rename(hex2L = hex)
+# #hex shows colours for 1L vs primary.
+# #hex_2L shows colours for 2L vs primary
+# 
+# 
+# # final_carbon_df_4DR <- bi_class(final_carbon_df_4DR, x = propOriginalOG, y = prop1L, dim = 4, style = "equal") %>%  
+# #   left_join(cols, by = "bi_class") # add hex colours
+# 
+# #======================= #build some summary plts: ====================================================
+# 
+# 
+# #filter by category
+# legend_plot <-  geom_results_df %>% filter(spp_category == "loser" & scenarioName == "all_primary_CY_D.csv") 
+# losers <- geom_results_df %>% filter(spp_category == "loser") 
+# intermediate <- geom_results_df %>% filter(spp_category == "intermediate") 
+# winners <-  geom_results_df %>% filter(spp_category == "winner") 
+# 
+# #==========================#
+# #~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# scenario_filters <- c("all_primary_CY_D.csv", "mostly_1L_CY_D.csv", "mostly_2L_CY_D.csv")
+# 
+# #build plotting function
+# plot_fun <- function(x){
+#   
+#   x <- x %>%
+#     filter(scenarioName %in% scenario_filters)
+#   
+#   
+#   
+#   #reorder facet order 
+#   
+#   x$scenarioName <- factor(x$scenarioName, levels = c(
+#     "all_primary_CY_D.csv",
+#     #"all_primary_CY_ND.csv","all_primary_IY_D.csv", "all_primary_IY_ND.csv",
+#     "mostly_1L_CY_D.csv",
+#     #"mostly_1L_CY_ND.csv", "mostly_1L_IY_D.csv", "mostly_1L_IY_ND.csv",
+#     #"mostly_1L_deforested_CY_D.csv", "mostly_1L_deforested_CY_ND.csv", "mostly_1L_deforested_IY_D.csv", "mostly_1L_deforested_IY_ND.csv", 
+#     "mostly_2L_CY_D.csv"))
+#   #"mostly_2L_CY_ND.csv", "mostly_2L_IY_D.csv", "mostly_2L_IY_ND.csv",
+#   #"mostly_2L_deforested_CY_D.csv", "mostly_2L_deforested_CY_ND.csv", "mostly_2L_deforested_IY_D.csv","mostly_2L_deforested_IY_ND.csv",
+#   #"primary_deforested_CY_D.csv", "primary_deforested_CY_ND.csv", "primary_deforested_IY_D.csv","primary_deforested_IY_ND.csv"))
+#   
+#   
+#   x %>%  ggplot(aes(x = production_target, y = weighted_geom_mean))+
+#     # conditionally colour so that if we plot bivariate between proportion of primary and proportion of least logged (either 1L or 2L depending on starting landscape) in the scenario    
+#     geom_point(aes(
+#       x = production_target,
+#       y = weighted_geom_mean,
+#       colour = case_when(
+#         scenarioStart %in% c("all_primary", "primary_deforested") ~ hexP,
+#         scenarioStart %in% c("mostly_1L", "mostly_1L_deforested") ~ hex1L,
+#         scenarioStart %in% c("mostly_2L", "mostly_2L_deforested") ~ hex2L
+#       )
+#     ), position = position_jitter(width = 0.05, height = -0.03)) +
+#     scale_colour_identity()+
+#     
+#     xlim(0, 1)+
+#     xlab("Production target")+
+#     ylab("Weighted geometric mean change")+
+#     
+#     #labs(colour = "Proportion of remaining old-growth forest spared")+
+#     # labs(colour = "Proportion of plantation in remaining landscape")+
+#     
+#     facet_wrap(~scenarioName, ncol = 4)+
+#     #   geom_hline(aes(yintercept = SL_geom_mean))+
+#     theme_bw(base_size = textSize)+
+#     theme(legend.position = "none")
+#   
+# }
+# 
+# #get legend
+# legend_plot <- plot_fun(legend_plot)
+# legend <- get_legend(legend_plot + theme(legend.position = "bottom",         # c(0.5, 0.15),
+#                                          legend.spacing.x = unit(1.0, 'cm'),
+#                                          legend.title  = element_text(size  = 30, face = "bold"))) 
+# #plot figures (without legends)
+# losers <- plot_fun(losers)
+# intermediate <- plot_fun(intermediate)
+# winners <- plot_fun(winners)
+# 
+# #add legend function
+# add_legend <-  function(x){
+#   plot_grid(x, legend, 
+#             nrow =2 , ncol = 1,
+#             rel_heights = c(1, 0.1))
+# } 
+# 
+# #-------------------- PLOT FINAL FIGURES ----------------------------------------
+# #plot final figs for each above-defined category 
+# add_legend(losers)
+# plot_grid(losers, all_legend, nrow =2)
+# add_legend(intermediate)
+# plot_grid(intermediate, all_legend, nrow =2)
+# add_legend(winners)
+# plot_grid(winners, all_legend, nrow =2)
+# 
+# 
+# 
+# 
+# 
+# 
+# 
