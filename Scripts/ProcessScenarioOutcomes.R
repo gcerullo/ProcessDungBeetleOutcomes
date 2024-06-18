@@ -1,3 +1,5 @@
+#GC 17.06.24
+
 #Assess the dung beetle outcomes of different scenarios, where each scenario is disaggregated by age
 
 rm(list = ls())
@@ -12,17 +14,17 @@ library(cowplot)
 library(foreach)
 library(doParallel)
 
-setwd("C:/Users/Gianluca Cerullo/OneDrive - University of Cambridge/PhD/Chapter_4_Borneo/CompleteFolder")
 
 #read in the scenario parametres containing conversion factors for converting from point to parcel/entire landscape  
-source('R_code/BuildScenarios/BiolerCodeScenarioConstruction.R')
+source("Inputs/ScenarioParams.R")
 
 
 #set a cap for relative occupancy so that the scenario occupancy of a species cannot be more than CAPtimes the occupancy of the starting landscape
 cap <- 1  
 
 #read in DB trap-level abundance for each posterior draw 
-DBs <- readRDS("R_code/CleaningHistoricDungBeetleData/AbundanceAnalysis/Outputs/DBs_abundance_by_habAge_iterations.rds")
+#this is calculated in PredictAbundanceByHab.R
+DBs <- readRDS("Outputs/DBs_abundance_by_habAge_iterations.rds")
 
 names(DBs)
 #remove eucalpyus and albizia improved if we don't need it 
