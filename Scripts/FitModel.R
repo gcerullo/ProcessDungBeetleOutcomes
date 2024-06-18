@@ -30,28 +30,23 @@ sum_df <- sum_df %>%
 
 
 # final model  ####
-#GC 17.06.24 - check####
-
-#Checkwith oscar that I've put the model code correctly - specifically
-#here I have placed "total_effort" based on my memory, but it was run on Oscar's desktop
-#so check this is how we actually ended up fitting it ####
 
 #NB can take >3 days to run on 8 cores
 runtime <- system.time({
   full_model = brm(
     bf(
-      sum_count ~ 0 + albizia + primary + twice_logged + once_logged +
+      sum_count ~ 0 +total_effort + albizia + primary + twice_logged + once_logged +
         eucalyptus + restored + albizia:time_since_intervention_ctr + 
         once_logged:time_since_intervention_ctr +
         eucalyptus:time_since_intervention_ctr + restored:time_since_intervention_ctr +
-        time_since_intervention_ctr + total_effort +
+        time_since_intervention_ctr  +
         (1|Year_factor) + (1|site) +
         (0 + albizia + primary + twice_logged + once_logged +
            eucalyptus + restored + albizia:time_since_intervention_ctr + 
            once_logged:time_since_intervention_ctr +
            eucalyptus:time_since_intervention_ctr + restored:time_since_intervention_ctr +
            time_since_intervention_ctr|spp),
-      zi ~ 0 + albizia + primary + twice_logged + once_logged +
+      zi ~ 0 + total_effort + albizia + primary + twice_logged + once_logged +
         eucalyptus + restored + albizia:time_since_intervention_ctr + 
         once_logged:time_since_intervention_ctr +
         eucalyptus:time_since_intervention_ctr + restored:time_since_intervention_ctr +
@@ -112,6 +107,9 @@ newdat <- sum_df %>%
   group_by(habitat, time_since_intervention_ctr, time_since_intervention) %>%
   tally()
 
+#GC17.06.24!!!#####
+
+#come back to - doesnt currently run like this 
 Ave_sp <- add_epred_draws(newdat, full_model, re_formula = NA, ndraws = 250) %>%
   group_by(habitat, time_since_intervention) %>%
   median_hdci(.epred, .width = .9)
