@@ -486,5 +486,9 @@ output <- final_abs %>% select(index, production_target,scenarioStart,
                                  medianRelativeOccupancy, p5_medianRelativeOccupancy, p95_medianRelativeOccupancy,
                                  spp_category) %>% cbind(outcome = "dungBeetles ")
 
+#add back in scenarioNames
+scenarioNames <- scenario_composition %>% select(index,production_target, scenarioName) %>% unique()
+output <- output %>% left_join(scenarioNames)
+
 saveRDS(output, "FinalPerformanceOutput/MasterDBPerformance.rds")
 
