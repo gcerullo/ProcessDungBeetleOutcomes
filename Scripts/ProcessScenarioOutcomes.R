@@ -233,26 +233,6 @@ for (k in seq_along(csv_files)){
 stopCluster(cl)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # #!!! change folder name here when running on desktop!!!
 # #set a folder for saving outputs, showing for each species and scenario and iteration, occ_60 for lanscape
 # rds_folder <- "Outputs/Ab60perScenarioIterationSept24"
@@ -353,7 +333,7 @@ stopCluster(cl)
 
 
 #-----------------calculate geometric for each  iteration and species category ----
-cap <- 1.5 # don't allow scenario occ to be more than 1.5 starting landscape occ [only used if calculating geometric mean]
+#cap <- 1.5 # don't allow scenario occ to be more than 1.5 starting landscape occ [only used if calculating geometric mean]
 sppCategories <- readRDS("Outputs/DBsppCategories.rds")
 sppCategories<- as.data.table(sppCategories)
 abundance_folder <- "Outputs/Ab60perScenarioIterationSept24"
@@ -440,7 +420,7 @@ for (w in seq_along(ab60_files)){
 #---
 
 
-#--------  read in geom means ----------------------
+#--------  read in relative abundance ----------------------
 #geomMean_files <- list.files(geom_result_folder, pattern = "*.rds", full.names = TRUE)
 #read in data that has been baselined the fully old-growth starting landscape  
 relAb_files <- list.files(relative_ab_folder, pattern = "^OGbaseline.*\\.rds$", full.names = TRUE)
@@ -454,43 +434,29 @@ subGeom <- rel_abs[[1]] %>% filter(spp_category == "loser") %>% select(index) %>
   unique() %>% slice(1:80) %>% pull()
 checkDist <- rel_abs[[1]] %>% filter(index %in% rel_abs)
 
-checkDist %>% ggplot(aes(x = SppMedRelOcc)) +
-  geom_histogram(binwidth = 0.01, color = "black", fill = "blue", alpha = 0.6) +
-  facet_wrap(~index, scales = "free") +
-  labs(
-    title = "Histogram of medianRelOcc by Index",
-    x = "medianRelOcc",
-    y = "Frequency"
-  )+
-  xlim(0, 1)
+# checkDist %>% ggplot(aes(x = SppMedRelOcc)) +
+#   geom_histogram(binwidth = 0.01, color = "black", fill = "blue", alpha = 0.6) +
+#   facet_wrap(~index, scales = "free") +
+#   labs(
+#     title = "Histogram of medianRelOcc by Index",
+#     x = "medianRelOcc",
+#     y = "Frequency"
+#   )+
+#   xlim(0, 1)
+# 
+# checkDist %>% filter(index == "all_primary_CY_D.csv 6") %>%
+#   ggplot(aes(x = SppMedRelOcc)) +
+#   geom_histogram(binwidth = 0.0001, color = "black", fill = "blue", alpha = 0.6) +
+#   facet_wrap(~index, scales = "free") +
+#   labs(
+#     title = "Histogram of medianRelOcc by Index",
+#     x = "medianRelOcc",
+#     y = "Frequency"
+#   )+
+#   xlim(0, 1)
 
-checkDist %>% filter(index == "all_primary_CY_D.csv 6") %>%
-  ggplot(aes(x = SppMedRelOcc)) +
-  geom_histogram(binwidth = 0.0001, color = "black", fill = "blue", alpha = 0.6) +
-  facet_wrap(~index, scales = "free") +
-  labs(
-    title = "Histogram of medianRelOcc by Index",
-    x = "medianRelOcc",
-    y = "Frequency"
-  )+
-  xlim(0, 1)
-
-subGeom <- geomMeans[[1]]
-subGeom %>% filter(index == "all_primary_CY_D.csv 6")
-
-names(subGeom)  
-# summarise_across_posterior_fun <- function(x){
-#   x %>% group_by(spp_category, index, production_target) %>%  
-#     summarise(geom_mean =median(geometric_mean), 
-#               medianRelativeOccupancy = median(medRelOcc),
-#               p5_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.05),
-#               p95_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.95), 
-#               IQR)
-#               
-# }
 
 #summarised across data that has already been medianed per spp from 500 draws
-
 summarise_across_posterior_fun <- function(x){
   x %>% #left_join(sppCategories, by = "species") %>%
     group_by(spp_category, index, production_target) %>%  
@@ -512,13 +478,13 @@ final_abs <- final_abs %>%
             relationship = "many-to-many")# %>% 
 
 
-
 #-----EXPORT OUTCOME PERFORMANCE for consolidated figure of all outcomes -----
 getwd()
 names(final_abs)
-output <- final_abs %>% select(index, production_target, scenarioName,scenarioStart,
+
+output <- final_abs %>% select(index, production_target,scenarioStart,
                                  medianRelativeOccupancy, p5_medianRelativeOccupancy, p95_medianRelativeOccupancy,
                                  spp_category) %>% cbind(outcome = "dungBeetles ")
 
-saveRDS(output, "FinalPerformanceOutput/FinalDBPerformance.rds")
+saveRDS(output, "FinalPerformanceOutput/MasterDBPerformance.rds")
 

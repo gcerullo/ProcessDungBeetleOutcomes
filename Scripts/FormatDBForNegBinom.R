@@ -60,8 +60,7 @@ df <- df %>% mutate(day_numeric = ifelse(is.na(day), 2, as.numeric(substr(day, 2
 #summarise trap count 
 sum_df <- df %>% group_by(spp,site,transect, trap) %>% summarise(sum_count = sum(abundance),total_effort = max(day_numeric),
                                                                  habitat = unique(habitat),
-                                                                 time_since_intervention = unique(time_since_intervention),
-                                                                 sample_year = unique(sample_year)) %>% ungroup
+                                                                 time_since_intervention = unique(time_since_intervention)                                                             sample_year = unique(sample_year)) %>% ungroup
 
 
 
