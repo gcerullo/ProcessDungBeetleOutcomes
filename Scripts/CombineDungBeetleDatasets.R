@@ -83,7 +83,6 @@ slade <- read.csv("RawData/Slade_2005_DanumBrL.csv") %>%  rename(traptype = trap
 gian2022 <- read.csv("RawData/DungBeetle2022DataRawDanum_SSBPlantation.csv") %>% mutate_all(as.character)
 
 
-
 #OTHER INPUTS - Read in Necessary inputs  #### 
 
 #sppName backbone ####
@@ -112,6 +111,25 @@ plantation <- read.csv("Inputs/Plantation_Habitat_Structure.csv") %>% dplyr::sel
   rename(site = Site, 
          trap = Point,
          plantation_age = Age) 
+
+#add plantation GPS sites to Historic GPS 
+plantationGPS <- read.csv("Inputs/DaveSimonDanielPoints.csv") %>%
+  filter(Habitat == "Albizia_falcataria"| Habitat ==  "Eucalyptus_pellita") %>%  
+  mutate(point = str_replace(point, "^P", "t")) %>%  
+  rename(site = Site, 
+         trap = point, 
+         Lat = Lat, 
+         Long = Long, 
+         habitat = Habitat) %>% 
+  mutate(habitat = case_when(
+    habitat == "Albizia_falcataria" ~ "albizia",
+    habitat == "Eucalyptus_pellita" ~ "eucalyptus",
+    TRUE ~ habitat  # Keep other values unchanged
+  )) %>% 
+  select(site,trap, Lat, Long)
+
+
+HistoricGPS <- HistoricGPS %>% rbind(plantationGPS)
 
 #add in CrossWalk for correcting 35 species crosschecked for ID at Singapore Uni
 #corect the 35 individuals re-analyses @ singapore University by Slade et al. 
@@ -318,7 +336,7 @@ gian2022 <- gian2022 %>% pivot_longer(cols = !c(spp),
                                       values_to = "abundance")   #and assigning values to a column called "abundance" 
 
 
-#add a transect column that's same a site
+#add a transect column that's same as site
 gian2022 <- gian2022 %>% mutate(transect = site) %>%  
   #replace nas as zero 
   mutate(abundance = as.numeric(abundance)) %>% 
@@ -403,7 +421,6 @@ allsppNamecurrent <- rbind(matchingNames,nonMatchingNames)
 
 #export names to make AllNamesCrossOver with matching names, manually
 #write.csv(allsppName, "Outputs/ManuallyEditAllNamesBackbone.csv")
-
 
 
 #COMBINE DATA 
@@ -514,8 +531,10 @@ write.csv(full_df, "Outputs/dungBeetlesForAbundanceAnalysis.csv")
 gian2022ForestData <- full_df %>%
   filter(sampler == "GC" & sample_year == 2022) %>% 
   filter(abundance > 0) %>%  
-  filter(!(habitat %in% c("albizia", "eucalyptus"))) %>%  
-  select(-plantation_age)
+# filter(!(habitat %in% c("albizia", "eucalyptus"))) %>%  
+  select(-plantation_age) %>% 
+  mutate(SamplingMethod = "HBPT") %>%  
+  left_join(HistoricGPS)
 
 write.csv(gian2022ForestData,"Outputs/2022_GianlucaForestData_Clean_Upload.csv")
 
@@ -526,17 +545,21 @@ gian2022allData <- full_df %>%
 
 #EXTRA UNRELATED##### 
 #!!!!TO DO
-#ADD  SAFE GPS POINTS 
-#ADD GIAN2022 PLANTATIONS GPS POINTS [need to correct plantation data]
-
-#extract data (gps) for crossChecked in Singapore spp  
-
-correctIDsSingapore <- correctIDsSingapore %>%left_join(full_df, by= c( "CorrectedSpName" = "spp", "site", "trap", 
-                                                      "sample_year", "transect", "abundance", "day", "sampler", "habitat")) %>% 
-  filter(abundance >0) %>%  select(-c(Long, Lat,month))
-
-gps_filt <- full_df %>% select(site,trap, Long,Lat, transect) %>% unique() %>%  
-  filter(!is.na(Long)) %>%  
-  filter(!is.na(Lat))
-
-correctIDsSingapore <- correctIDsSingapore %>% left_join(gps_filt) %>% unique()
+# #ADD  SAFE GPS POINTS 
+# #ADD GIAN2022 PLANTATIONS GPS POINTS [need to correct plantation data]
+# 
+# #extract data (gps) for crossChecked in Singapore spp  
+# 
+# correctIDsSingapore <- correctIDsSingapore %>%left_join(full_df, by= c( "CorrectedSpName" = "spp", "site", "trap", 
+#                                                       "sample_year", "transect", "abundance", "day", "sampler", "habitat")) %>% 
+#   filter(abundance >0) %>%  select(-c(Long, Lat,month))
+# 
+# gps_filt <- full_df %>% select(site,trap, Long,Lat, transect) %>% unique() %>%  
+#   filter(!is.na(Long)) %>%  
+#   filter(!is.na(Lat))
+# 
+# correctIDsSingapore <- correctIDsSingapore %>% left_join(gps_filt) %>% unique() %>% 
+#   select(-c(plantation_age,time_since_logging, logging_year))
+# 
+# write.csv(correctIDsSingapore, "Outputs/SingaporeFullyLabelledSpecimens.csv")
+         
