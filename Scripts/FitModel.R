@@ -102,28 +102,25 @@ sum_df %>%
 
 #### Average species count ####
 
-## Get data for the range of data you have per hab and predict the counts
+## Get data for the range of data we have per hab and predict the counts
 newdat <- sum_df %>% 
   group_by(habitat, time_since_intervention_ctr, time_since_intervention) %>%
   tally()
 
-#GC17.06.24!!!#####
 
 #come back to - doesnt currently run like this 
 Ave_sp <- add_epred_draws(newdat, full_model, re_formula = NA, ndraws = 250) %>%
   group_by(habitat, time_since_intervention) %>%
   median_hdci(.epred, .width = .9)
 
-## Bit of an issue here as some of your habitats have very small time since intervention ranges
-## (or even just a single time)
+
 ggplot(Ave_sp, aes(time_since_intervention, .epred, colour = habitat)) +
   geom_line() +
   geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
   facet_wrap(~habitat) +
   theme_minimal()
 
-## Guessing you want to actually predict those over a full time scale?
-## Be a bit careful as this is extrapolating beyond the range of data you observed.
+##  nb we don't actual predict across the full age range (ie. we dont extrapolate beyond the data; see ProcessScenarioOutcomes.R)
 newdat2 <- expand.grid(habitat = unique(sum_df$habitat), time_since_intervention_ctr = 
                          unique(sum_df$time_since_intervention_ctr))
 
@@ -131,8 +128,8 @@ Ave_sp2 <- add_epred_draws(newdat2, simple_test_model13, re_formula = NA, ndraws
   group_by(habitat, time_since_intervention_ctr) %>%
   median_hdci(.epred, .width = .9)
 
-## Yeah so it largely works, because you're extrapolating to never observed states
-## the uncertainty is pretty big
+## It largely works, because we're extrapolating to never observed states
+## the uncertainty is pretty big (but see above point)
 ggplot(Ave_sp2, aes(time_since_intervention_ctr, .epred, colour = habitat)) +
   geom_line() +
   geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +

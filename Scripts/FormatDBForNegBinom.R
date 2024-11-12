@@ -60,7 +60,8 @@ df <- df %>% mutate(day_numeric = ifelse(is.na(day), 2, as.numeric(substr(day, 2
 #summarise trap count 
 sum_df <- df %>% group_by(spp,site,transect, trap) %>% summarise(sum_count = sum(abundance),total_effort = max(day_numeric),
                                                                  habitat = unique(habitat),
-                                                                 time_since_intervention = unique(time_since_intervention)                                                             sample_year = unique(sample_year)) %>% ungroup
+                                                                 time_since_intervention = unique(time_since_intervention),
+                                                                 sample_year = unique(sample_year)) %>% ungroup
 
 
 
@@ -74,7 +75,7 @@ sum_df <- sum_df %>%
 
 #deal with singletons and doubletons #### 
 
-##54 species are either singletons or doubletons across all surveying effort! 
+##45 species are either singletons or doubletons across all surveying effort! 
 singleton_doubleton_spp <-  sum_df %>%
   filter(sum_count > 0) %>%
   group_by(spp) %>% 
@@ -83,7 +84,7 @@ singleton_doubleton_spp <-  sum_df %>%
   filter(n < 3) %>%
   select(spp)
 
-#what habitat were these species found in? 
+#what habitat were these species found in? (mostly primary and once-logged forest) 
 singleton_doubleton_spp_HAB <- singleton_doubleton_spp %>%
   left_join(sum_df, by= "spp") %>%  
   filter(sum_count > 0 ) %>% 
