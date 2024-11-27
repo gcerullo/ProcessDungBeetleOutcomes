@@ -1,4 +1,4 @@
-# Gc 17.06.24
+# Gc 26.11.24
 #Process model outputs - e.g. extract model abundance estiamtes per habitat type and age.
 
 library(brms)
@@ -27,7 +27,9 @@ beetles <- read.csv("Outputs/full_DB_dataframeFor_BRMS_analysis_withSingletons.c
 #read.csv("Outputs/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv")
 
 #read in model Zero-inflated negative binom ouput 
-rmodel<- readRDS("Models/DB_zi_full4.rds")
+#rmodel<- readRDS("Models/DB_zi_full4.rds")
+rmodel<- readRDS("Models/DB_zi_full_Nov24.rds")
+
 summary(rmodel)
 formula(rmodel)
 
