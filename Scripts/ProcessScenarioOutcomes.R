@@ -13,7 +13,32 @@ library(stringr)
 library(cowplot)
 library(foreach)
 library(doParallel)
+library(purrr)
+library(profvis)
+# install.packages("bayestestR", repos = "https://easystats.r-universe.dev")
+library(bayestestR)
 
+#------------------------------------------
+#DBspp correction PUSH UPSTREAM!! #####
+#Notes (these are all singletons in the dataset)
+#CaccobiusSp1_GC & Caccobius_sp1_GC should have been removed; not dung beetles 
+#Onthophagus_sp1_GC should be Onthophagus trituber - remove for now 
+#Onthophagus_sp3_GC should be Caccobius.bawangensis - rmove for now
+#Onthophagus_sp8_GC should be Onthophagus fujii Ochi & Kon - remove for now 
+#Onticellus_sp1_GC ; not a dung beetle - remove
+DBs_incorrect <- DBs %>%
+  filter(grepl("_GC", species, ignore.case = FALSE)) %>%  select(species)  %>% unique()
+
+# Define the function to remove the specified species names
+remove_specific_species <- function(df) {
+  species_to_remove <- c("CaccobiusSp1_GC", "Caccobius_sp1_GC", 
+                         "Onthophagus_sp1_GC", "Onthophagus_sp3_GC", 
+                         "Onthophagus_sp8_GC", "Onticellus_sp1_GC")
+  
+  df %>%
+    filter(!species %in% species_to_remove)
+}
+#------------------------------------------------
 
 #Define inputs ####
 
@@ -24,6 +49,8 @@ source("Inputs/ScenarioParams.R")
 #read in DB trap-level abundance for each posterior draw 
 #this is calculated in PredictAbundanceByHab.R
 DBs <- readRDS("Outputs/DBs_abundance_by_habAge_iterations.rds")
+DBs <- remove_specific_species(DBs)
+
 
 #-----read in scenarios without delays to get scenario composition -------
 scenarios <- readRDS("Inputs/MasterAllScenarios.rds")
@@ -166,7 +193,7 @@ library(doParallel)
 
 
 #set a folder for saving outputs, showing for each species and scenario and iteration, occ_60 for lanscape
-rds_folder <- "Outputs/Ab60perScenarioIterationSept24"
+rds_folder <- "Outputs/Ab60perScenarioIterationJan25"
 
 # Detect cores and set cluster (use detectCores()-1 to leave one core for system processes)
 num_cores <- detectCores() - 1
@@ -331,12 +358,11 @@ stopCluster(cl)
 # }
 
 
-
-#-----------------calculate geometric for each  iteration and species category ----
+#-----------------calculate median for each  iteration and species category ----
 #cap <- 1.5 # don't allow scenario occ to be more than 1.5 starting landscape occ [only used if calculating geometric mean]
 sppCategories <- readRDS("Outputs/DBsppCategories.rds")
 sppCategories<- as.data.table(sppCategories)
-abundance_folder <- "Outputs/Ab60perScenarioIterationSept24"
+abundance_folder <- "Outputs/Ab60perScenarioIterationJan25"
 ab60_files <- list.files(abundance_folder, pattern = "*.rds", full.names = TRUE)
 
 
@@ -350,7 +376,7 @@ SL_occ60_dt <- rbindlist(SL_occ60) %>%
 SL_all_primary_dt<- SL_occ60_dt %>% filter(scenarioStart == "all_primary") 
 
 # Allocate folder for summarised results (geometric means and relative abundance )
-relative_ab_folder <- "Outputs/RelativeAbundancePerIterationSept24"
+relative_ab_folder <- "Outputs/RelativeAbundancePerIterationJan2025"
 
 
 for (w in seq_along(ab60_files)){
@@ -401,15 +427,26 @@ for (w in seq_along(ab60_files)){
   #   summarise(geometric_mean = exp(mean(log(rel_occ_capped),na.rm = TRUE)), 
   #             medRelOcc = median(rel_occ,na.rm = TRUE)) %>% as.data.table()
   
-  #summarise species-level median rel occ across 500 iterations 
+  #summarise group median rel occ across 500 iterations 
   
   # Summarize species-level median rel occ across iterations
-  rel_abs <- occ_comb[, .(SppMedRelOcc = median(rel_occ, na.rm = TRUE)), 
-                         by = .(species, index, production_target)]
+  rel_abs <- occ_comb %>%  group_by(species, index, production_target) %>%  
+    summarize(
+      medianRelativeOccupancy = median(rel_occ, na.rm = TRUE),
+      meanRelativeOccupancy = mean(rel_occ, na.rm = TRUE),
+      p1_medianRelativeOccupancy = quantile(rel_occ, 0.1, na.rm = TRUE),
+      p9_medianRelativeOccupancy = quantile(rel_occ, 0.9, na.rm = TRUE),
+      # Calculate 70% HPD intervals because of right skewed posterior distribution
+      hpd_70_lower = hdi(rel_occ, ci = 0.7)$CI_low,
+      hpd_70_upr = hdi(rel_occ, ci = 0.7)$CI_high,
+      hpd_50_lower = hdi(rel_occ, ci = 0.5)$CI_low,
+      hpd_50_upr = hdi(rel_occ, ci = 0.5)$CI_high
+    )
   
-  #add back in species categories if not involved in the grouping variable above  
-  rel_abs <- sppCategories[rel_abs, on = "species"]
   
+  # #add back in species categories if not involved in the grouping variable above  
+  # rel_abs <- sppCategories[rel_abs, on = "species"]
+  # 
   # Print the current iteration
   cat("Running iteration", rds_file_name, "\n")
   
@@ -419,63 +456,111 @@ for (w in seq_along(ab60_files)){
 
 #---
 
+###################################################
+#################################################
+##################################################
+#FOR UNCERTAINTY -calculate proportion of scenarios where logging is better than plantations
+#set older for storing best scenario (logging or plantation) for each production target
+best_scenario_folder <- "Outputs/BestScenarioUncertainty"
 
+#folder storing abudances across 60yrs
+ab60 <- "Outputs/Ab60perScenarioIterationJan25"
+ab60files <- list.files(ab60, pattern = "*.rds", full.names = TRUE)
+
+#scenario start abundance
+#SL_60yrOcc 
+SL_occ60 <- readRDS("Outputs/SL_occ60yr_perIterationJan25.rds")
+SL_occ60_dt <- rbindlist(SL_occ60) %>%
+  rename(SL_occ_60yr = occ_60yr)
+
+#EXTRACT ONLY THE BASELINE ALL_PRIMARY SL
+SL_all_primary_dt<- SL_occ60_dt %>% filter(scenarioStart == "all_primary") 
+
+#how often are plantation scenarios better than logging scenarios 
+logging_or_plantation_scenarios <- scenario_composition %>%  
+  group_by(index, production_target) %>%  
+  # Add information on proportion of plantation
+  mutate(propPlant = sum(num_parcels[habitat %in% c("eucalyptus_current", "albizia_current", "albizia_future", "eucalyptus_future")]) / 1000) %>%  
+  select(index, production_target, propPlant, scenarioStart) %>% 
+  mutate(treatment_strategy = case_when(
+    propPlant > 0 ~ "plantation",
+    propPlant == 0 ~ "logging"
+  )) %>%    select(-propPlant) %>%  unique() %>%  
+  as.data.table()
+
+for (w in seq_along(ab60files)){
+  occ60 <- readRDS(ab60files[[w]])
+  occ60_dt <- rbindlist(occ60)
+  rds_file_name <- paste("BestScenario_", basename(ab60files[[w]]), sep = "")
+  best_scenario_file_path <- file.path(best_scenario_folder, rds_file_name)   
+  
+  #add starting landscape to scenarios 
+  scenarioStart <- occ60_dt %>% select(index, production_target) %>%
+    unique() %>% left_join(scenario_composition, by = c("index", "production_target")) %>%  
+    select(scenarioStart) %>% unique() %>% drop_na()
+  occ60_dt[, scenarioStart := scenarioStart]
+  
+  #NB this conveys each species starting landscape occupancy
+  occ_comb <- occ60_dt[SL_all_primary_dt, on = .(species, iteration), nomatch = 0]
+  
+  #calculate rel_occ
+  occ_comb <- occ_comb[, rel_occ := occ_60yr / SL_occ_60yr]
+  
+  #add in scenario composition to highlight logging vs plantation scenarios
+  occ_comb <- occ_comb %>% left_join(logging_or_plantation_scenarios)
+  
+  #for each production target and species, find the proportion of iterations where the best scenario 
+  #(ie with the highest relOcc) is plantation-dominated. 
+  #Do this for PAIRED scenario draws (ie iterations of the model)
+  best_scenario <- occ_comb %>%  group_by(species, production_target, iteration) %>% 
+    filter(rel_occ == max(rel_occ)) %>%  
+    select(species, iteration, production_target, treatment_strategy, rel_occ) %>%  
+    rename(max_rel_occ = rel_occ) %>% unique()
+  
+  #PUSH UPSTREAM (remove incorrect singleton species)
+  best_scenario  <- best_scenario %>% remove_specific_species()
+  
+  #save the output to an rds folder 
+  saveRDS(best_scenario, file = best_scenario_file_path)
+}
+
+#This would be an example of paired scenario draws (ie based on the same model params)
+PairedExample <- occ_comb %>% filter(species == "Anoctus.laevis" & iteration == '459' & production_target == 0.39)
+
+x %>% filter(rel_occ == max(rel_occ))
+
+###################################################
+###################################################
+##################################################
+#!!!!!!!REMEMBER TO USE THE remove_specific_species()
 #--------  read in relative abundance ----------------------
 #geomMean_files <- list.files(geom_result_folder, pattern = "*.rds", full.names = TRUE)
 #read in data that has been baselined the fully old-growth starting landscape  
 relAb_files <- list.files(relative_ab_folder, pattern = "^OGbaseline.*\\.rds$", full.names = TRUE)
 rel_abs <- lapply(relAb_files, readRDS)
 
-#----- summarise geom means and across posterior draws  -----
-
-#check; are values normally distributed across posterior draws - if not then take median of median rel occ
-#or median of geometric means 
-subGeom <- rel_abs[[1]] %>% filter(spp_category == "loser") %>% select(index) %>% 
-  unique() %>% slice(1:80) %>% pull()
-checkDist <- rel_abs[[1]] %>% filter(index %in% rel_abs)
-
-# checkDist %>% ggplot(aes(x = SppMedRelOcc)) +
-#   geom_histogram(binwidth = 0.01, color = "black", fill = "blue", alpha = 0.6) +
-#   facet_wrap(~index, scales = "free") +
-#   labs(
-#     title = "Histogram of medianRelOcc by Index",
-#     x = "medianRelOcc",
-#     y = "Frequency"
-#   )+
-#   xlim(0, 1)
-# 
-# checkDist %>% filter(index == "all_primary_CY_D.csv 6") %>%
-#   ggplot(aes(x = SppMedRelOcc)) +
-#   geom_histogram(binwidth = 0.0001, color = "black", fill = "blue", alpha = 0.6) +
-#   facet_wrap(~index, scales = "free") +
-#   labs(
-#     title = "Histogram of medianRelOcc by Index",
-#     x = "medianRelOcc",
-#     y = "Frequency"
-#   )+
-#   xlim(0, 1)
-
+#----- summarise relative abundance across groups of species for which have median relative occupancy  -----
 
 #summarised across data that has already been medianed per spp from 500 draws
+
+
+#for species groupings (winner, loser, intermediate)
 summarise_across_posterior_fun <- function(x){
-  x %>% #left_join(sppCategories, by = "species") %>%
+  x %>% left_join(sppCategories, by = "species") %>%
     group_by(spp_category, index, production_target) %>%  
-    summarise(medianRelativeOccupancy = median(SppMedRelOcc),
-              p5_medianRelativeOccupancy = quantile(SppMedRelOcc, 0.05),
-              p95_medianRelativeOccupancy = quantile(SppMedRelOcc, 0.95), 
-              IQR = IQR(SppMedRelOcc))
+    summarise(medianRelativeOccupancy = median(medianRelativeOccupancy),
+              p1_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.1),
+              p9_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.9), 
+              IQR_medianRelativeOccupancy = IQR(medianRelativeOccupancy), 
+              geometric_mean = exp(mean(log(medianRelativeOccupancy), na.rm = TRUE)),
+              p1_geometric_mean = exp(quantile(log(medianRelativeOccupancy), 0.1, na.rm = TRUE)),
+              p9_geometric_mean = exp(quantile(log(medianRelativeOccupancy), 0.9, na.rm = TRUE))
+    )
+  
   
 }
-
-
 #---output of summarised statistics across posterior draws ----
-final_abs <- lapply(rel_abs, summarise_across_posterior_fun)
-final_abs <- rbindlist(final_abs)
-
-#add back in key information 
-final_abs <- final_abs %>% 
-  left_join(scenario_composition, by = c("index", "production_target"),
-            relationship = "many-to-many")# %>% 
+final_relOcc <- summarise_across_posterior_fun(rel_occ_df)
 
 
 #-----EXPORT OUTCOME PERFORMANCE for consolidated figure of all outcomes -----

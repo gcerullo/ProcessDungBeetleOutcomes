@@ -262,6 +262,8 @@ dbMeans <- processed_beetles[, .(abundance = median(abundance),
                              by = .(species, habitat, functionalhabAge)]
 
 #-----calculate species categories ----- 
+CR <- dbMeans %>% filter(species == 'Catharsius.renaudpauliani')
+
 losers <- dbMeans %>% 
   filter(functionalhabAge < 30) %>%  
   group_by(species)  %>%  
@@ -269,6 +271,9 @@ losers <- dbMeans %>%
   mutate(spp_category = case_when(habitat =="primary" ~"loser", TRUE ~ NA_character_)) %>% 
   filter(spp_category == "loser") %>% select(species,spp_category) %>% unique()
 
+losersCR <- CR %>% 
+  filter(functionalhabAge < 30) %>%  
+  filter(abundance == max(abundance))
 
 intermediates1L <- dbMeans %>%
   filter(functionalhabAge < 30) %>%  
@@ -291,7 +296,10 @@ winners <- dbMeans %>%
   filter(abundance == max(abundance)) %>%
   mutate(spp_category = case_when(
     habitat == "albizia_current" ~ "winner",
+    habitat == "albizia" ~ "winner",
     habitat == "eucalyptus_current" ~ "winner",
+    habitat == "eucalyptus" ~ "winner",
+    
     TRUE ~ NA_character_
   )) %>% 
   filter(spp_category == "winner") %>% select(species,spp_category) %>% unique()
@@ -299,10 +307,16 @@ winners <- dbMeans %>%
 #spp categories 
 sppCategories <- rbind(losers,intermediates1L,intermediates2L,winners) %>% ungroup
 
+#check all good 
+all_species <- unique(dbMeans$species)
+
+categorized_species <- unique(sppCategories$species)
+species_not_categorized <- setdiff(all_species, categorized_species)
+species_not_categorized
+
 #----save outtputs ----
 saveRDS(processed_beetles,"Outputs/DBs_abundance_by_habAge_iterations.rds")
 saveRDS(sppCategories,"Outputs/DBsppCategories.rds")
-
 
 
 

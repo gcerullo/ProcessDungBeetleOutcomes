@@ -142,8 +142,6 @@ correctIDsSingapore <- read.csv("RawData/SingaporeIDCheckCrossWalk.csv") %>%
          site = Site)
 
 #Clean data and fill in gaps ####
-
-
 #Gianluca's 2017 data 
 
 #apply pivot function to the list then rbind list
