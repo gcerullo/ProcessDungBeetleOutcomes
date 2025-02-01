@@ -26,8 +26,8 @@ library(bayestestR)
 #Onthophagus_sp3_GC should be Caccobius.bawangensis - rmove for now
 #Onthophagus_sp8_GC should be Onthophagus fujii Ochi & Kon - remove for now 
 #Onticellus_sp1_GC ; not a dung beetle - remove
-DBs_incorrect <- DBs %>%
-  filter(grepl("_GC", species, ignore.case = FALSE)) %>%  select(species)  %>% unique()
+# DBs_incorrect <- DBs %>%
+#   filter(grepl("_GC", species, ignore.case = FALSE)) %>%  select(species)  %>% unique()
 
 # Define the function to remove the specified species names
 remove_specific_species <- function(df) {
@@ -56,6 +56,7 @@ DBs <- remove_specific_species(DBs)
 scenarios <- readRDS("Inputs/MasterAllScenarios.rds")
 scenario_composition <- rbindlist(scenarios, use.names=TRUE) # get scenario composition
 rm(scenarios)
+
 
 #read in scenarios WITH delays, where every scenarioType is a single csv
 #NB this is the same as MasterAllScenarios_withDelays.rds, except that all list elements are csvs
@@ -129,7 +130,7 @@ execute_SL_fun <-function(zeta) {
 #do this to calculate occ_60yr for each species, scenarioStart, and posterior draw iteration 
 result_list_SL <- lapply(1:nrow(combinations_SL), execute_SL_fun) 
 
-saveRDS(result_list_SL,"Outputs/SL_occ60yr_perIterationSept24.rds")
+saveRDS(result_list_SL,"Outputs/SL_occ60yr_perIterationJan25.rds")
 
 
 
@@ -368,7 +369,7 @@ ab60_files <- list.files(abundance_folder, pattern = "*.rds", full.names = TRUE)
 
 #scenario start abundance
 #SL_60yrOcc 
-SL_occ60 <- readRDS("Outputs/SL_occ60yr_perIterationSept24.rds")
+SL_occ60 <- readRDS("Outputs/SL_occ60yr_perIterationJan25.rds")
 SL_occ60_dt <- rbindlist(SL_occ60) %>%
   rename(SL_occ_60yr = occ_60yr)
 
@@ -376,7 +377,7 @@ SL_occ60_dt <- rbindlist(SL_occ60) %>%
 SL_all_primary_dt<- SL_occ60_dt %>% filter(scenarioStart == "all_primary") 
 
 # Allocate folder for summarised results (geometric means and relative abundance )
-relative_ab_folder <- "Outputs/RelativeAbundancePerIterationJan2025"
+relative_ab_folder <- "Outputs/RelativeAbundancePerIterationJan25"
 
 
 for (w in seq_along(ab60_files)){
@@ -436,11 +437,6 @@ for (w in seq_along(ab60_files)){
       meanRelativeOccupancy = mean(rel_occ, na.rm = TRUE),
       p1_medianRelativeOccupancy = quantile(rel_occ, 0.1, na.rm = TRUE),
       p9_medianRelativeOccupancy = quantile(rel_occ, 0.9, na.rm = TRUE),
-      # Calculate 70% HPD intervals because of right skewed posterior distribution
-      hpd_70_lower = hdi(rel_occ, ci = 0.7)$CI_low,
-      hpd_70_upr = hdi(rel_occ, ci = 0.7)$CI_high,
-      hpd_50_lower = hdi(rel_occ, ci = 0.5)$CI_low,
-      hpd_50_upr = hdi(rel_occ, ci = 0.5)$CI_high
     )
   
   
@@ -535,9 +531,13 @@ x %>% filter(rel_occ == max(rel_occ))
 #!!!!!!!REMEMBER TO USE THE remove_specific_species()
 #--------  read in relative abundance ----------------------
 #geomMean_files <- list.files(geom_result_folder, pattern = "*.rds", full.names = TRUE)
-#read in data that has been baselined the fully old-growth starting landscape  
+#read in data that has been baselined the fully old-growth starting landscape 
+# Allocate folder for summarised results (geometric means and relative abundance )
+relative_ab_folder <- "Outputs/RelativeAbundancePerIterationJan25"
 relAb_files <- list.files(relative_ab_folder, pattern = "^OGbaseline.*\\.rds$", full.names = TRUE)
 rel_abs <- lapply(relAb_files, readRDS)
+rel_occ_df <- rbindlist(rel_abs) %>%  
+  left_join(sppCategories)
 
 #----- summarise relative abundance across groups of species for which have median relative occupancy  -----
 
@@ -546,16 +546,12 @@ rel_abs <- lapply(relAb_files, readRDS)
 
 #for species groupings (winner, loser, intermediate)
 summarise_across_posterior_fun <- function(x){
-  x %>% left_join(sppCategories, by = "species") %>%
+  x %>% 
+    remove_specific_species() %>% #move ustream 
     group_by(spp_category, index, production_target) %>%  
     summarise(medianRelativeOccupancy = median(medianRelativeOccupancy),
               p1_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.1),
-              p9_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.9), 
-              IQR_medianRelativeOccupancy = IQR(medianRelativeOccupancy), 
-              geometric_mean = exp(mean(log(medianRelativeOccupancy), na.rm = TRUE)),
-              p1_geometric_mean = exp(quantile(log(medianRelativeOccupancy), 0.1, na.rm = TRUE)),
-              p9_geometric_mean = exp(quantile(log(medianRelativeOccupancy), 0.9, na.rm = TRUE))
-    )
+              p9_medianRelativeOccupancy = quantile(medianRelativeOccupancy, 0.9))
   
   
 }
@@ -565,14 +561,14 @@ final_relOcc <- summarise_across_posterior_fun(rel_occ_df)
 
 #-----EXPORT OUTCOME PERFORMANCE for consolidated figure of all outcomes -----
 getwd()
-names(final_abs)
 
-output <- final_abs %>% select(index, production_target,scenarioStart,
-                                 medianRelativeOccupancy, p5_medianRelativeOccupancy, p95_medianRelativeOccupancy,
+
+output <- final_relOcc %>% select(index, production_target,
+                                 medianRelativeOccupancy, p1_medianRelativeOccupancy, p9_medianRelativeOccupancy,
                                  spp_category) %>% cbind(outcome = "dungBeetles ")
 
 #add back in scenarioNames
-scenarioNames <- scenario_composition %>% select(index,production_target, scenarioName) %>% unique()
+scenarioNames <- scenario_composition %>% select(index,scenarioStart,production_target, scenarioName) %>% unique()
 output <- output %>% left_join(scenarioNames)
 
 saveRDS(output, "FinalPerformanceOutput/MasterDBPerformance.rds")
