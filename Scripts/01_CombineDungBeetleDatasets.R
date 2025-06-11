@@ -32,7 +32,7 @@ library(dplyr)
 library(ggpubr)
 library(cowplot)
 library(forcats)
-library(data.table)
+#library(data.table)
 library(geosphere)
 library(stringr)
 
@@ -534,7 +534,15 @@ gian2022ForestData <- full_df %>%
   mutate(SamplingMethod = "HBPT") %>%  
   left_join(HistoricGPS)
 
-write.csv(gian2022ForestData,"Outputs/2022_GianlucaForestData_Clean_Upload.csv")
+#export species for Singapore export license
+gianSPP <- gian2022ForestData %>% select(spp, abundance) %>%  
+  group_by(spp) %>% 
+  summarise(count = sum(abundance))
+
+
+write.csv(gian2022ForestData,"Outputs/2022_GianlucaForestData_Clean_Upload_v2.csv")
+gian2022ForestData %>%  select(site) %>% unique()
+write.csv(gianSPP,"Outputs/2025_SingaporeExportSpp.csv")
 
 #gian2022ForestData <- full_df %>%
 gian2022allData <- full_df %>%  
