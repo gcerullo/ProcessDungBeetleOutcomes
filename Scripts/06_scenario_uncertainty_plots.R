@@ -131,10 +131,40 @@ plot_list <- lapply(chunked_spp, function(spp_chunk) {
 
 all_sp_split1 <- plot_list[[1]]
 all_sp_split2 <- plot_list[[2]]
-plot_list[[3]]
 
 
-#EXPORT FIGURES 
+#EXPORT FIGURES ####
+
+#PDF ####
+
+# Save the loser species combined plots as A4-sized output
+ggsave("Figures/loser_dungbeetle_uncertainty_plot.pdf",
+       loser_dungbeetle_uncertainty_plot,
+       width = 15, height = 11.69, units = "in", 
+       bg = "white")
+
+ggsave("Figures/int1lgrp_dungbeetle_uncertainty_plot.pdf",
+       int1_dungbeetle_uncertainty_plot,
+       width = 15, height = 11.69, units = "in", 
+       bg = "white")
+
+ggsave("Figures/all_sp_uncertainty_plot.pdf",
+       all_sp_uncertainty_plot,
+       width = 12, height = 12, units = "in", 
+       bg = "white")
+
+
+ggsave("Figures/all_sp_chunk1.pdf",
+       all_sp_split1,
+       width = 12, height = 12, units = "in", 
+       bg = "white")
+
+ggsave("Figures/all_sp_chunk2.pdf",
+       all_sp_split2,
+       width = 12, height = 12, units = "in", 
+       bg = "white")
+
+#PNG ####
 # Save the loser species combined plots as A4-sized output
 ggsave("Figures/loser_dungbeetle_uncertainty_plot.png",
        loser_dungbeetle_uncertainty_plot,
