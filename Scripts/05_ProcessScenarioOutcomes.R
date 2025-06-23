@@ -19,25 +19,25 @@ library(profvis)
 library(bayestestR)
 
 #------------------------------------------
-#DBspp correction PUSH UPSTREAM!! #####
-#Notes (these are all singletons in the dataset)
-#CaccobiusSp1_GC & Caccobius_sp1_GC should have been removed; not dung beetles 
-#Onthophagus_sp1_GC should be Onthophagus trituber - remove for now 
-#Onthophagus_sp3_GC should be Caccobius.bawangensis - rmove for now
-#Onthophagus_sp8_GC should be Onthophagus fujii Ochi & Kon - remove for now 
-#Onticellus_sp1_GC ; not a dung beetle - remove
-# DBs_incorrect <- DBs %>%
-#   filter(grepl("_GC", species, ignore.case = FALSE)) %>%  select(species)  %>% unique()
-
-# Define the function to remove the specified species names
-remove_specific_species <- function(df) {
-  species_to_remove <- c("CaccobiusSp1_GC", "Caccobius_sp1_GC", 
-                         "Onthophagus_sp1_GC", "Onthophagus_sp3_GC", 
-                         "Onthophagus_sp8_GC", "Onticellus_sp1_GC")
-  
-  df %>%
-    filter(!species %in% species_to_remove)
-}
+# #DBspp correction PUSH UPSTREAM!! #####
+# #Notes (these are all singletons in the dataset)
+# #CaccobiusSp1_GC & Caccobius_sp1_GC should have been removed; not dung beetles 
+# #Onthophagus_sp1_GC should be Onthophagus trituber - remove for now 
+# #Onthophagus_sp3_GC should be Caccobius.bawangensis - rmove for now
+# #Onthophagus_sp8_GC should be Onthophagus fujii Ochi & Kon - remove for now 
+# #Onticellus_sp1_GC ; not a dung beetle - remove
+# # DBs_incorrect <- DBs %>%
+# #   filter(grepl("_GC", species, ignore.case = FALSE)) %>%  select(species)  %>% unique()
+# 
+# # Define the function to remove the specified species names
+# remove_specific_species <- function(df) {
+#   species_to_remove <- c("CaccobiusSp1_GC", "Caccobius_sp1_GC", 
+#                          "Onthophagus_sp1_GC", "Onthophagus_sp3_GC", 
+#                          "Onthophagus_sp8_GC", "Onticellus_sp1_GC")
+#   
+#   df %>%
+#     filter(!species %in% species_to_remove)
+# }
 #------------------------------------------------
 
 #Define inputs ####
@@ -453,8 +453,6 @@ for (w in seq_along(ab60_files)){
 #---
 
 ###################################################
-#################################################
-##################################################
 #FOR UNCERTAINTY -calculate proportion of scenarios where logging is better than plantations
 #set older for storing best scenario (logging or plantation) for each production target
 best_scenario_folder <- "Outputs/BestScenarioUncertainty"
@@ -526,13 +524,10 @@ PairedExample <- occ_comb %>% filter(species == "Anoctus.laevis" & iteration == 
 x %>% filter(rel_occ == max(rel_occ))
 
 ###################################################
-###################################################
-##################################################
-#!!!!!!!REMEMBER TO USE THE remove_specific_species()
+
 #--------  read in relative abundance ----------------------
-#geomMean_files <- list.files(geom_result_folder, pattern = "*.rds", full.names = TRUE)
 #read in data that has been baselined the fully old-growth starting landscape 
-# Allocate folder for summarised results (geometric means and relative abundance )
+# Allocate folder for summarised results 
 relative_ab_folder <- "Outputs/RelativeAbundancePerIterationJan25"
 relAb_files <- list.files(relative_ab_folder, pattern = "^OGbaseline.*\\.rds$", full.names = TRUE)
 rel_abs <- lapply(relAb_files, readRDS)
