@@ -60,7 +60,7 @@ runtime <- system.time({
               set_prior('normal(0,1)', class = 'b', dpar = "zi"),
               set_prior('normal(0,1)', class = 'sd', dpar = "zi")),
     data=sum_df,
-    file = "Models/DB_zi_full4.rds",
+    file = "Models/DB_zi_full_Nov24.rds",
     family = zero_inflated_negbinomial(),
     chains = 4, iter = 2500, warmup = 1250, 
     control = list(adapt_delta = 0.9),

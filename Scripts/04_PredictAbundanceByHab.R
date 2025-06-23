@@ -1,8 +1,8 @@
 # Gc 26.11.24
-#Process model outputs - e.g. extract model abundance estiamtes per habitat type and age.
+#Process model outputs - e.g. extract model abundance estimates per habitat type and age.
 
 library(brms)
-library(cmdstanr)
+# library(cmdstanr)
 library(tidyverse)
 library(stringdist)
 library(fuzzyjoin)
@@ -12,7 +12,6 @@ library(posterior)
 library(bayesplot)
 library(data.table)
 
-
 # Turn off scientific notation globally
 options(scipen = 999)
 
@@ -21,13 +20,12 @@ options(scipen = 999)
 # read in raw abundance data  
 
 # With singletons and doubletons included
-beetles <- read.csv("Outputs/full_DB_dataframeFor_BRMS_analysis_withSingletons.csv")
+#beetles <- read.csv("Outputs/full_DB_dataframeFor_BRMS_analysis_withSingletons.csv")
 
 # Without singletons and doubletons 
-#read.csv("Outputs/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv")
+beetles <- read.csv("Outputs/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv")
 
 #read in model Zero-inflated negative binom ouput 
-#rmodel<- readRDS("Models/DB_zi_full4.rds")
 rmodel<- readRDS("Models/DB_zi_full_Nov24.rds")
 
 summary(rmodel)
@@ -123,20 +121,20 @@ head(modelDraws)
 
 modelDraws <- as.data.table(modelDraws)
 
-
-# ---- visualise the model predictions per spp ------------
-
-unique_spp <- beetles %>%ungroup %>%  select(spp) %>% unique() %>% slice(1:50) %>% pull()
-test <- modelDraws %>% filter(species %in% unique_spp) %>%
-  filter(!habitat == "restored") %>% 
-  group_by(species, functionalhabAge,
-           habitat) %>% summarise(mean = mean(abundance),
-                                  lower_percentile = quantile(abundance, 0.05),
-                                  upper_percentile = quantile(abundance, 0.95))# %>% filter(!habitat == "restored")
-ggplot(test, aes(functionalhabAge, mean, colour = habitat)) +
-  geom_line() + 
-  #  geom_ribbon(aes(ymin = lower_percentile, ymax = upper_percentile),fill = NA) +
-  facet_wrap(~species, scales = "free")
+# 
+# # ---- visualise the mean model predictions per spp ------------
+# 
+# unique_spp <- beetles %>%ungroup %>%  select(spp) %>% unique() %>% slice(1:50) %>% pull()
+# test <- modelDraws %>% filter(species %in% unique_spp) %>%
+#   filter(!habitat == "restored") %>% 
+#   group_by(species, functionalhabAge,
+#            habitat) %>% summarise(mean = mean(abundance),
+#                                   lower_percentile = quantile(abundance, 0.05),
+#                                   upper_percentile = quantile(abundance, 0.95))# %>% filter(!habitat == "restored")
+# ggplot(test, aes(functionalhabAge, mean, colour = habitat)) +
+#   geom_line() + 
+#   #  geom_ribbon(aes(ymin = lower_percentile, ymax = upper_percentile),fill = NA) +
+#   facet_wrap(~species, scales = "free")
 
 #------------ process draws to provide full data and platue unobserved years  -----------------------
 
@@ -229,7 +227,7 @@ process_beetle_data <- function(x) {
   return(modelDraws)
 }
 
-# Call the function to process your 'beetles' data frame
+# Call the function to process your 'beetles' data frame; this explores per-species and iteration patterns
 processed_beetles <- process_beetle_data(modelDraws)
 
 #----plot processed data -----
