@@ -1,6 +1,7 @@
 #Build figure of uncertainty for whether plantations or logging are better for each each species 
 
 #NOTES: 
+
 #This script reads in BestScenario Inputs from AssessScenarioOutcomes.R script. 
 #This, for each sp and production target, compared paired draws (ie iterations) and extracted whether 
 #the scenario with the highest relative occupancy was treatment_strategy or logging or plantation. 
