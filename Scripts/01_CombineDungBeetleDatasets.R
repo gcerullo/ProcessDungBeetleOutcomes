@@ -32,7 +32,6 @@ library(dplyr)
 library(ggpubr)
 library(cowplot)
 library(forcats)
-#library(data.table)
 library(geosphere)
 library(stringr)
 
@@ -525,29 +524,30 @@ full_df <- full_df %>% mutate(time_since_logging = sample_year - logging_year) %
 #save the master Dung beetle data 
 write.csv(full_df, "Outputs/dungBeetlesForAbundanceAnalysis.csv")
 
-#write master copy of Gcerullo 2022 Sampling (need to add plantation GPS points) 
-gian2022ForestData <- full_df %>%
-  filter(sampler == "GC" & sample_year == 2022) %>% 
-  filter(abundance > 0) %>%  
-# filter(!(habitat %in% c("albizia", "eucalyptus"))) %>%  
-  select(-plantation_age) %>% 
-  mutate(SamplingMethod = "HBPT") %>%  
-  left_join(HistoricGPS)
+#Non-manuscript exports #####----------
+# #write master copy of Gcerullo 2022 Sampling (need to add plantation GPS points) 
+# gian2022ForestData <- full_df %>%
+#   filter(sampler == "GC" & sample_year == 2022) %>% 
+#   filter(abundance > 0) %>%  
+# # filter(!(habitat %in% c("albizia", "eucalyptus"))) %>%  
+#   select(-plantation_age) %>% 
+#   mutate(SamplingMethod = "HBPT") %>%  
+#   left_join(HistoricGPS)
+# 
+# #export species for Singapore export license
+# gianSPP <- gian2022ForestData %>% select(spp, abundance) %>%  
+#   group_by(spp) %>% 
+#   summarise(count = sum(abundance))
 
-#export species for Singapore export license
-gianSPP <- gian2022ForestData %>% select(spp, abundance) %>%  
-  group_by(spp) %>% 
-  summarise(count = sum(abundance))
 
-
-write.csv(gian2022ForestData,"Outputs/2022_GianlucaForestData_Clean_Upload_v2.csv")
-gian2022ForestData %>%  select(site) %>% unique()
-write.csv(gianSPP,"Outputs/2025_SingaporeExportSpp.csv")
-
-#gian2022ForestData <- full_df %>%
-gian2022allData <- full_df %>%  
-  filter(sampler == "GC" & sample_year == 2022) %>% 
-  filter(abundance > 0)
+# write.csv(gian2022ForestData,"Outputs/2022_GianlucaForestData_Clean_Upload_v2.csv")
+# gian2022ForestData %>%  select(site) %>% unique()
+# write.csv(gianSPP,"Outputs/2025_SingaporeExportSpp.csv")
+# 
+# #gian2022ForestData <- full_df %>%
+# gian2022allData <- full_df %>%  
+#   filter(sampler == "GC" & sample_year == 2022) %>% 
+#   filter(abundance > 0)
 
 #EXTRA UNRELATED##### 
 #!!!!TO DO
