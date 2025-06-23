@@ -1,7 +1,6 @@
 #GC 17/06/24
 #Fit zero-inflated negative binomial model to dung beetle data
 
-
 library(tidyverse)
 library(brms)
 library(bayesplot)
@@ -13,10 +12,9 @@ library(tidybayes)
 #Read in processed data (where time since intervention has already been scaled)
 #This is the output from FormatDBforNegBinom.R 
 
-sum_df<- data.table::fread("Outputs/full_DB_dataframeFor_BRMS_analysis_withSingletons.csv")
+#sum_df<- data.table::fread("Outputs/full_DB_dataframeFor_BRMS_analysis_withSingletons.csv")
 
-#NB 17.06.24 - NEED TO RERUN THIS WITH SINGLETONS AND DOUBLETONS REMOVED!!!
-#sum_df<- data.table::fread("Outputs/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv")
+sum_df<- data.table::fread("Outputs/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv")
 
 #last data formatting ####
 sum_df <- sum_df %>%
@@ -99,57 +97,55 @@ sum_df %>%
   ggplot(aes(x = .row, y = .residual)) +
   stat_pointinterval(alpha = .4, colour = "lightsteelblue3") + theme_classic() 
 
-
-#### Average species count ####
-
-## Get data for the range of data we have per hab and predict the counts
-newdat <- sum_df %>% 
-  group_by(habitat, time_since_intervention_ctr, time_since_intervention) %>%
-  tally()
-
-
-#come back to - doesnt currently run like this 
-Ave_sp <- add_epred_draws(newdat, full_model, re_formula = NA, ndraws = 250) %>%
-  group_by(habitat, time_since_intervention) %>%
-  median_hdci(.epred, .width = .9)
-
-
-ggplot(Ave_sp, aes(time_since_intervention, .epred, colour = habitat)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
-  facet_wrap(~habitat) +
-  theme_minimal()
-
-##  nb we don't actual predict across the full age range (ie. we dont extrapolate beyond the data; see ProcessScenarioOutcomes.R)
-newdat2 <- expand.grid(habitat = unique(sum_df$habitat), time_since_intervention_ctr = 
-                         unique(sum_df$time_since_intervention_ctr))
-
-Ave_sp2 <- add_epred_draws(newdat2, simple_test_model13, re_formula = NA, ndraws = 250) %>%
-  group_by(habitat, time_since_intervention_ctr) %>%
-  median_hdci(.epred, .width = .9)
-
-## It largely works, because we're extrapolating to never observed states
-## the uncertainty is pretty big (but see above point)
-ggplot(Ave_sp2, aes(time_since_intervention_ctr, .epred, colour = habitat)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
-  facet_wrap(~habitat, scales = "free") +
-  theme_minimal()
-
-
-#### Species-level ####
-
-newdat3 <- sum_df %>% group_by(habitat, time_since_intervention_ctr, time_since_intervention, spp) %>% tally()
-
-Ave_sp3 <- add_epred_draws(newdat3, full_model, re_formula = NULL, ndraws = 250) %>%
-  group_by(spp, habitat, time_since_intervention_ctr, time_since_intervention) %>%
-  median_hdci(.epred, .width = .9)
-
-ggplot(Ave_sp3, aes(time_since_intervention, .epred, colour = habitat)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
-  facet_wrap(~spp, scales = "free") +
-  theme_minimal()
+# 
+# #### Average species count ####
+# 
+# ## Get data for the range of data we have per hab and predict the counts
+# newdat <- sum_df %>% 
+#   group_by(habitat, time_since_intervention_ctr, time_since_intervention) %>%
+#   tally()
+# 
+# Ave_sp <- add_epred_draws(newdat, full_model, re_formula = NA, ndraws = 250) %>%
+#   group_by(habitat, time_since_intervention) %>%
+#   median_hdci(.epred, .width = .9)
+# 
+# 
+# ggplot(Ave_sp, aes(time_since_intervention, .epred, colour = habitat)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
+#   facet_wrap(~habitat) +
+#   theme_minimal()
+# 
+# ##  nb we don't actual predict across the full age range (ie. we dont extrapolate beyond the data; see ProcessScenarioOutcomes.R)
+# newdat2 <- expand.grid(habitat = unique(sum_df$habitat), time_since_intervention_ctr = 
+#                          unique(sum_df$time_since_intervention_ctr))
+# 
+# Ave_sp2 <- add_epred_draws(newdat2, simple_test_model13, re_formula = NA, ndraws = 250) %>%
+#   group_by(habitat, time_since_intervention_ctr) %>%
+#   median_hdci(.epred, .width = .9)
+# 
+# ## It largely works, because we're extrapolating to never observed states
+# ## the uncertainty is pretty big (but see above point)
+# ggplot(Ave_sp2, aes(time_since_intervention_ctr, .epred, colour = habitat)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
+#   facet_wrap(~habitat, scales = "free") +
+#   theme_minimal()
+# 
+# 
+# #### Species-level ####
+# 
+# newdat3 <- sum_df %>% group_by(habitat, time_since_intervention_ctr, time_since_intervention, spp) %>% tally()
+# 
+# Ave_sp3 <- add_epred_draws(newdat3, full_model, re_formula = NULL, ndraws = 250) %>%
+#   group_by(spp, habitat, time_since_intervention_ctr, time_since_intervention) %>%
+#   median_hdci(.epred, .width = .9)
+# 
+# ggplot(Ave_sp3, aes(time_since_intervention, .epred, colour = habitat)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = .lower, ymax = .upper), fill = NA) +
+#   facet_wrap(~spp, scales = "free") +
+#   theme_minimal()
 
 #previous model runs ####
 
