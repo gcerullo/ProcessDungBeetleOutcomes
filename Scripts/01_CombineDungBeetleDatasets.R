@@ -524,7 +524,17 @@ full_df <- full_df %>% mutate(time_since_logging = sample_year - logging_year) %
 #save the master Dung beetle data 
 write.csv(full_df, "Outputs/dungBeetlesForAbundanceAnalysis.csv")
 
+# For Anna
+#only keep data with gps point and make restored forest as once-logged
+anna_data <- full_df %>% filter(!is.na(Long)) %>%  
+  mutate(habitat = case_when(
+  habitat == "restored" ~ "once-logged",
+TRUE ~ habitat))
+
+
 #Non-manuscript exports #####----------
+write.csv(anna_data, "Outputs/data_for_annna_db_borneo.csv")
+
 # #write master copy of Gcerullo 2022 Sampling (need to add plantation GPS points) 
 # gian2022ForestData <- full_df %>%
 #   filter(sampler == "GC" & sample_year == 2022) %>% 

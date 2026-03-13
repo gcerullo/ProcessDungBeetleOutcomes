@@ -46,6 +46,11 @@ beetles %>%   mutate(habitat = case_when(
   facet_wrap(~spp, scales = "free") +
   theme(strip.background = element_blank())
 
+beetles %>%
+  group_by(habitat) %>%
+  slice_max(time_since_intervention) %>% 
+  select(habitat, time_since_intervention) %>% unique()
+
 
 ## Create a data frame with all combinations of species, habitat type, and habitat age I want to predict
 time_since_intervention_prediction_points = seq(0, 60, by = 1) # years we want to predict for
@@ -141,101 +146,180 @@ modelDraws <- as.data.table(modelDraws)
 
 #---- process beetles data ----
 
-#define missing field data years where we want to replace model-derived estimates
-ages <- data.frame(functionalhabAge = rep(seq(0,60))) 
-#early years of once-logged and restored 
-missing1L_R_rs <- data.frame(functionalhabAge = rep(seq(0,20))) 
-#late years of restored
-missing20yrsR <- data.frame(functionalhabAge = rep(seq(30,60))) 
-
-names(modelDraws)
-
-#function to process raw beetle data across posterior distributions
+# #define missing field data years where we want to replace model-derived estimates
+# ages <- data.frame(functionalhabAge = rep(seq(0,60))) 
+# #early years of once-logged and restored 
+# missing1L_R_rs <- data.frame(functionalhabAge = rep(seq(0,20))) 
+# #late years of restored
+# missing20yrsR <- data.frame(functionalhabAge = rep(seq(41,60))) 
+# 
+# names(modelDraws)
+# 
+# 
 process_beetle_data <- function(x) {
   
+  # Define age grids
+  ages            <- data.frame(functionalhabAge = seq(0, 60))
+  missing1L_R_rs  <- data.frame(functionalhabAge = seq(0, 20))
+  missing20yrsR   <- data.frame(functionalhabAge = seq(40, 60))
   
+  modelDraws <- x  # keep everything inside function
   
-  # Step 1: Add "improved" habitat (obsolete)
+  #--------------------------------------------------------------
+  # Step 1: Normalise habitat names
+  #--------------------------------------------------------------
   modelDraws <- modelDraws %>%  
     mutate(habitat = case_when(
-    #  habitat == "albizia" ~ "albizia_current",
       habitat == "eucalyptus" ~ "eucalyptus_current",
-      TRUE ~ habitat))
+      TRUE ~ habitat
+    ))
   
-  # improved <- modelDraws %>%
-  #   filter(habitat %in% c("eucalyptus_current", "albizia_current")) %>%
-  #   mutate(
-  #     habitat = case_when(
-  #       habitat == "eucalyptus_current" ~ "eucalyptus_improved",
-  #       habitat == "albizia_current" ~ "albizia_improved",
-  #       TRUE ~ habitat
-  #     )
-  #   )
-  
- # modelDraws <- bind_rows(modelDraws, improved)
-  
-  # Step 3: Add missing years and assume 19 years of recovery for "once-logged" and "restored"
-  
-  #assume each year before functionalhabAge 19 has the same occupancy as yr 19 (i.e immediate recovery to yr 19 levels) 
-  beetles_1L_19 <- modelDraws %>% 
-    filter(habitat == "once-logged" & functionalhabAge == 19) %>% 
+  #--------------------------------------------------------------
+  # Step 2: Plateau early years (0–20) for once-logged & restored
+  #--------------------------------------------------------------
+  beetles_1L_19 <- modelDraws %>%
+    filter(habitat == "once-logged", functionalhabAge == 20) %>%
     select(-functionalhabAge) %>%
-    group_by(species,habitat,iteration) %>% 
-    crossing(missing1L_R_rs) 
+    group_by(species, habitat, iteration) %>%
+    crossing(missing1L_R_rs)
   
-  beetles_R_19 <- modelDraws %>% 
-    filter(habitat == "restored" & functionalhabAge == 19) %>% 
+  beetles_R_19 <- modelDraws %>%
+    filter(habitat == "restored", functionalhabAge == 20) %>%
     select(-functionalhabAge) %>%
-    group_by(species,habitat,iteration) %>% 
-    crossing(missing1L_R_rs) 
+    group_by(species, habitat, iteration) %>%
+    crossing(missing1L_R_rs)
   
-  #remove 1L and restored model-interpolated yrs and add yr 19 levels
   modelDraws <- modelDraws %>%
-    filter(!(habitat %in% c("once-logged", "restored") & functionalhabAge < 19 )) %>%
-    bind_rows(beetles_1L_19) %>%  
-    bind_rows(beetles_R_19)
+    filter(!(habitat %in% c("once-logged", "restored") &
+               functionalhabAge < 20)) %>%
+    bind_rows(beetles_1L_19, beetles_R_19)
   
-  
-  # Step 4: Assume no further recovery for "restored" habitat beyond ~40 years
-  beetles_R_40 <- modelDraws %>% 
-    filter(habitat == "restored" & functionalhabAge == 30) %>% 
+  #--------------------------------------------------------------
+  # Step 3: Plateau late restored years (40–60)
+  #--------------------------------------------------------------
+  beetles_R_40 <- modelDraws %>%
+    filter(habitat == "restored", functionalhabAge == 40) %>%
     select(-functionalhabAge) %>%
-    group_by(species,habitat,iteration) %>% 
-    crossing(missing20yrsR) 
+    group_by(species, habitat, iteration) %>%
+    crossing(missing20yrsR)
   
-  #remove restored beyond 40 yrs and add in plateud data 
   modelDraws <- modelDraws %>%
-    filter(!(habitat %in% c("restored") & functionalhabAge > 30 )) %>%
-    bind_rows(beetles_R_40) 
+    filter(!(habitat == "restored" & functionalhabAge > 40)) %>%
+    bind_rows(beetles_R_40)
   
-  # Step 5: Remove data for "eucalyptus" habitat beyond 6 years
+  #--------------------------------------------------------------
+  # Step 4: Remove eucalyptus values >6 years
+  #--------------------------------------------------------------
   modelDraws <- modelDraws %>%
-    filter(!(habitat %in% c("eucalyptus_current", "eucalyptus_improved") & functionalhabAge > 6))
+    filter(!(habitat %in% c("eucalyptus_current", "eucalyptus_improved") &
+               functionalhabAge > 6))
   
-  # Step 6: Interpolate deforested data from early plantation years
-  beetles_deforested <-  modelDraws %>%
-    filter((habitat %in% c("eucalyptus_current", "albizia_current")) & (functionalhabAge %in% c(0, 1, 2))) %>% 
-    select(-c(functionalhabAge,habitat)) %>%
-    group_by(species,iteration) %>% 
-    mutate(abundance = mean(abundance)) %>%  
-    crossing(ages) %>% 
-    cbind(habitat = "deforested")
+  #--------------------------------------------------------------
+  # Step 5: Define deforested (mean of plantation yrs 0–2)
+  #--------------------------------------------------------------
+  beetles_deforested <- modelDraws %>%
+    filter(habitat %in% c("eucalyptus_current", "albizia_current"),
+           functionalhabAge %in% c(0, 1, 2)) %>%
+    select(-functionalhabAge, -habitat) %>%
+    group_by(species, iteration) %>%
+    mutate(abundance = mean(abundance)) %>%
+    crossing(ages) %>%
+    mutate(habitat = "deforested")
   
-  modelDraws<- modelDraws %>% rbind(beetles_deforested) %>% 
-    filter(functionalhabAge < 62)
+  modelDraws <- modelDraws %>%
+    bind_rows(beetles_deforested) %>%
+    filter(functionalhabAge <= 60)
   
   return(modelDraws)
 }
 
-# Call the function to process your 'beetles' data frame; this explores per-species and iteration patterns
-processed_beetles <- process_beetle_data(modelDraws)
+# allow prediction up to yr 60 (ie beyond the data range (yr 40) for restored)
+
+process_beetle_data_linear_20only <- function(x) {
+  
+  ages            <- data.frame(functionalhabAge = seq(0, 60))
+  missing1L_R_rs  <- data.frame(functionalhabAge = seq(0, 20))
+  
+  modelDraws <- x
+  
+  # Normalize habitat names
+  modelDraws <- modelDraws %>%
+    mutate(habitat = case_when(
+      habitat == "eucalyptus" ~ "eucalyptus_current",
+      TRUE ~ habitat
+    ))
+  
+  #--------------------------------------------------------------
+  # Early plateau for 0–20
+  #--------------------------------------------------------------
+  beetles_1L_19 <- modelDraws %>%
+    filter(habitat == "once-logged", functionalhabAge == 20) %>%
+    select(-functionalhabAge) %>%
+    group_by(species, habitat, iteration) %>%
+    crossing(missing1L_R_rs)
+  
+  beetles_R_19 <- modelDraws %>%
+    filter(habitat == "restored", functionalhabAge == 20) %>%
+    select(-functionalhabAge) %>%
+    group_by(species, habitat, iteration) %>%
+    crossing(missing1L_R_rs)
+  
+  modelDraws <- modelDraws %>%
+    filter(!(habitat %in% c("once-logged", "restored") &
+               functionalhabAge < 20)) %>%
+    bind_rows(beetles_1L_19, beetles_R_19)
+  
+  #--------------------------------------------------------------
+  # NO plateau for ages >40 (KEEP model estimates!)
+  #--------------------------------------------------------------
+  
+  #--------------------------------------------------------------
+  # Eucalyptus >6
+  #--------------------------------------------------------------
+  modelDraws <- modelDraws %>%
+    filter(!(habitat %in% c("eucalyptus_current", "eucalyptus_improved") &
+               functionalhabAge > 6))
+  
+  #--------------------------------------------------------------
+  # Deforested = mean of 0–2
+  #--------------------------------------------------------------
+  beetles_deforested <- modelDraws %>%
+    filter(habitat %in% c("eucalyptus_current", "albizia_current"),
+           functionalhabAge %in% c(0, 1, 2)) %>%
+    select(-functionalhabAge, -habitat) %>%
+    group_by(species, iteration) %>%
+    mutate(abundance = mean(abundance)) %>%
+    crossing(ages) %>%
+    mutate(habitat = "deforested")
+  
+  modelDraws <- modelDraws %>%
+    bind_rows(beetles_deforested) %>%
+    filter(functionalhabAge <= 60)
+  
+  return(modelDraws)
+}
+
+
+processed_beetles     <- process_beetle_data(modelDraws)
+processed_beetles_lin <- process_beetle_data_linear_20only(modelDraws)
+
+saveRDS(processed_beetles, "Outputs/processedOccBeetles_plateau.rds")
+saveRDS(processed_beetles_lin, "Outputs/processedOccBeetles_no40yrplateau.rds")
+
+
+
+
+
 
 #----plot processed data -----
 restored <- processed_beetles %>% filter(habitat == "restored")   #restored data seems a bit high; come back to
 oneL <- processed_beetles %>% filter(habitat == "once-logged")
 
 fun_plot <- function(x){
-  x %>%  ggplot( aes(functionalhabAge, abundance, group = iteration)) +
+  x %>%  
+    filter(species %in% unique(species)[1:30]) %>%
+    
+    ggplot( aes(functionalhabAge, abundance, group = iteration)) +
     geom_line(alpha = 0.2) + 
     #  geom_ribbon(aes(ymin = lower_percentile, ymax = upper_percentile),fill = NA) +
     facet_wrap(~species, scales = "free")
@@ -244,147 +328,7 @@ fun_plot <- function(x){
 fun_plot(restored)
 fun_plot(oneL)
 
-#--------------------------------------
-#Quich plot 
-
-
-beetle_summ <- processed_beetles %>%
-  group_by(species, habitat, functionalhabAge) %>%
-  summarise(
-    abundance = median(abundance),
-    .groups = "drop"
-  )
-
-
-# Remove deforested
-df <- beetle_summ %>%
-  filter(habitat != "deforested")
-
-# Species-specific primary values
-primary_vals <- df %>%
-  filter(habitat == "primary") %>%
-  group_by(species) %>%
-  summarise(primary_abund = median(abundance), .groups = "drop")
-
-# Add primary value to trajectories
-df_plot <- df %>%
-  filter(habitat != "primary") %>%
-  left_join(primary_vals, by = "species") %>%
-  mutate(
-    abundance = ifelse(functionalhabAge == 0, primary_abund, abundance)
-  )
-
-# Primary points
-primary_points <- primary_vals %>%
-  mutate(functionalhabAge = 0)
-
-# Split datasets
-logging <- df_plot %>%
-  filter(habitat %in% c("once-logged","restored","twice-logged"))
-
-plantation <- df_plot %>%
-  filter(habitat %in% c("albizia","eucalyptus_current"))
-
-# -------------------------
-# LOGGING PANEL (TOP)
-# -------------------------
-
-p_logging <- ggplot() +
-  
-  geom_point(
-    data = primary_points,
-    aes(functionalhabAge, primary_abund),
-    colour = "black",
-    size = 1.4,
-    alpha = .8
-  ) +
-  
-  geom_line(
-    data = logging %>%
-      filter(!(habitat %in% c("once-logged","restored") & functionalhabAge < 19)),
-    aes(functionalhabAge, abundance, group = species),
-    alpha = .5,
-    colour = "grey20"
-  ) +
-  
-  geom_line(
-    data = logging %>%
-      filter(habitat %in% c("once-logged","restored") & functionalhabAge < 19),
-    aes(functionalhabAge, abundance, group = species),
-    linetype = "dashed",
-    alpha = .5,
-    colour = "grey20"
-  ) +
-  
-  facet_wrap(~habitat, ncol = 3, scales = "free_x") +
-  
-  theme_bw() +
-  theme(
-    strip.text = element_text(face = "bold"),
-    strip.background = element_blank(),
-    axis.text = element_text(colour = "black"),
-    panel.grid = element_blank()
-  ) +
-  
-  scale_x_continuous(
-    breaks = c(0,20,40,60),
-    labels = c("Primary",20,40,60)
-  ) +
-  
-  labs(
-    y = "Abundance",
-    x = "Time since logging"
-  )
-
-# -------------------------
-# PLANTATION PANEL (BOTTOM)
-# -------------------------
-
-p_plantation <- ggplot() +
-  
-  geom_point(
-    data = primary_points,
-    aes(functionalhabAge, primary_abund),
-    colour = "black",
-    size = 1.4,
-    alpha = .8
-  ) +
-  
-  geom_line(
-    data = plantation,
-    aes(functionalhabAge, abundance, group = species),
-    alpha = .5,
-    colour = "grey20"
-  ) +
-  
-  facet_wrap(~habitat, ncol = 2, scales = "free_x") +
-  
-  theme_bw() +
-  theme(
-    strip.text = element_text(face = "bold"),
-    strip.background = element_blank(),
-    axis.text = element_text(colour = "black"),
-    panel.grid = element_blank()
-  ) +
-  
-  scale_x_continuous(
-    breaks = c(0,5,10),
-    labels = c("Primary",5,10)
-  ) +
-  
-  labs(
-    y = "Abundance",
-    x = "Plantation age"
-  )
-
-# Plot
-p_logging
-p_plantation
-
-cowplot::plot_grid(p_logging,p_plantation, ncol = 1, rel_heights = c(1, 1))
-ggsave("figures/all_birs_curves.png", all_bird_curves, units="mm", height=297, width=210)
-
-
+#COME BACK HERE - I APPEAR TO BE GETTING SOME NON-LINEAR RELATIONSHIPS! 
 #-----calculate species categories --------
 
 #remove improved improved yields
