@@ -126,6 +126,8 @@ head(modelDraws)
 
 modelDraws <- as.data.table(modelDraws)
 
+
+
 # 
 # # ---- visualise the mean model predictions per spp ------------
 # 
@@ -140,6 +142,7 @@ modelDraws <- as.data.table(modelDraws)
 #   geom_line() + 
 #   #  geom_ribbon(aes(ymin = lower_percentile, ymax = upper_percentile),fill = NA) +
 #   facet_wrap(~species, scales = "free")
+
 
 #------------ process draws to provide full data and platue unobserved years  -----------------------
 
@@ -307,8 +310,131 @@ saveRDS(processed_beetles, "Outputs/processedOccBeetles_plateau.rds")
 saveRDS(processed_beetles_lin, "Outputs/processedOccBeetles_no40yrplateau.rds")
 
 
+#PLOT PROCESSED DATA 
 
 
+library(tidyverse)
+library(matrixStats)
+library(cowplot)
+
+# ---- Summarise posterior draws ----
+beetle_summ <- processed_beetles %>%
+  group_by(species, habitat, functionalhabAge) %>%
+  summarise(
+    mid = mean(abundance),
+    lwr = quantile(abundance, 0.1),
+    upr = quantile(abundance, 0.9),
+    .groups = "drop"
+  )
+
+# ---- Clean habitat labels to match bird figure ----
+unique(beetle_summ$habitat)
+beetle_summ <- beetle_summ %>%
+  mutate(
+    habitat = case_when(
+      habitat == "primary" ~ "Primary",
+      habitat == "once-logged" ~ "Once logged",
+      habitat == "twice-logged" ~ "Twice logged",
+      habitat == "restored" ~ "Restored",
+      habitat == "eucalyptus_current" ~ "Eucalyptus pellita",
+      habitat == "albizia" ~ "Albizia falcataria",
+      TRUE ~ habitat
+    )
+  )
+
+#remove unrealistically predictions for 	
+#Un_matched _ nr. Caccobius sp. A_FE and Onthophagus.quasijohkii in restored forest 
+beetle_summ <- beetle_summ %>%  filter(!species %in% c("Un_matched _ nr. Caccobius sp. A_FE",
+                                                       "Un_matched _ nr. Caccobius bawangensis_FE",
+                                                       "Onthophagus.quasijohkii"))
+
+unique(beetle_summ$species)
+# ---- Plantation dataframe ----
+plantation_pred_df <- beetle_summ %>%
+  filter(habitat %in% c("Eucalyptus pellita", "Albizia falcataria")) %>%
+  rename(plantation_age = functionalhabAge)
+
+# ---- Logging dataframe ----
+logging_pred_df <- beetle_summ %>%
+  filter(habitat %in% c("Once logged", "Restored")) %>%
+  rename(time_since_logging = functionalhabAge)
+
+# ---- Primary baseline points ----
+primary_points <- beetle_summ %>%
+  filter(habitat == "Primary") %>%
+  select(species, mid) %>%
+  distinct() %>%
+  mutate(
+    habitat = "Twice logged",
+    time_since_logging = 0
+  )
+
+# ---- Twice logged trajectories ----
+twice_log_seq <- seq(5, 60)
+
+twice_logged <- beetle_summ %>%
+  filter(habitat == "Twice logged") %>%
+  select(species, mid) %>%
+  crossing(time_since_logging = twice_log_seq) %>%
+  mutate(habitat = "Twice logged")
+
+twice_logged_full <- bind_rows(primary_points, twice_logged)
+
+# ---- Combine logging data ----
+plot_df <- bind_rows(logging_pred_df, twice_logged_full)
+
+# ---- Plantation figure ----
+plantation_fig <- plantation_pred_df %>%  
+  filter(plantation_age >= 0) %>%
+  ggplot(aes(plantation_age, mid, group = species)) +
+  geom_line(alpha = .5, col = 'grey0') +
+  geom_point(data = plantation_pred_df %>% filter(plantation_age == 0),
+             alpha = .5, col = 'grey0') +
+  geom_line(data = plantation_pred_df %>% filter(plantation_age <= 0),
+            lty = 'longdash', alpha = .5, col = 'grey0') +
+  facet_wrap(~habitat, nrow = 1) +
+  theme_bw() +
+  theme(strip.text = element_text(hjust = 0, face = "bold"),
+        strip.background = element_blank(),
+        axis.text = element_text(colour = "black"),
+        panel.grid = element_blank()) +
+  labs(y = "Relative abundance", x = "Plantation age") +
+  scale_x_continuous(breaks = c(0,5,10),
+                     labels = c("Primary",5,10))
+
+# ---- Logging figure ----
+logging_fig <- plot_df %>%  
+  filter(time_since_logging >= 19 | habitat == "Twice logged") %>%
+  ggplot(aes(time_since_logging, mid, group = species)) +
+  geom_line(alpha = .5, col = 'grey0') +
+  geom_point(data = plot_df %>% filter(time_since_logging == 0),
+             alpha = .5, col = 'grey0') +
+  geom_line(data = plot_df %>% filter(time_since_logging <= 21),
+            lty = 'longdash', alpha = .3, col = 'grey0') +
+  facet_wrap(~habitat, nrow = 1) +
+  theme_bw() +
+  theme(strip.text = element_text(hjust = 0, face = "bold"),
+        strip.background = element_blank(),
+        axis.text = element_text(colour = "black"),
+        panel.grid = element_blank()) +
+  labs(y = "Abundance", x = "Time since logging") +
+  ylim(0,25)+
+  # scale_x_continuous(breaks = c(0,40,60),
+  #                    labels = c("Primary",20,40,60))
+  scale_x_continuous(limits = c(0,40),
+                    breaks = c(0,10,20,30,40),
+                   labels = c("Primary",10,20,30, 40))
+
+# ---- Combine panels ----
+all_beetle_curves <- cowplot::plot_grid(logging_fig, plantation_fig,
+                                        ncol = 1,
+                                        rel_heights = c(1.2, 0.8))
+
+ggsave("figures/all_beetle_curves_clipped_40yrs.png",
+       all_beetle_curves,
+       units = "mm",
+       height = 297,
+       width = 210)
 
 
 #----plot processed data -----
