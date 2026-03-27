@@ -6,17 +6,8 @@ library(brms)
 library(bayesplot)
 library(tidybayes)
 
-#---- NR2 path configuration ----
-# NR2 INPUT: If running this script outside the project root, set this path explicitly.
-project_root <- "."
-nr2_root <- file.path(project_root, "Outputs", "NR2")
-nr2_figures_dir <- file.path(nr2_root, "figures")
-nr2_rds_dir <- file.path(nr2_root, "rds")
-nr2_models_dir <- file.path(nr2_root, "models")
-
-dir.create(nr2_figures_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(nr2_rds_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(nr2_models_dir, recursive = TRUE, showWarnings = FALSE)
+#---- NR2 config ----
+source(file.path("Scripts", "Nature_Revision2", "00_config.R"))
 
 #Read in data ####
 

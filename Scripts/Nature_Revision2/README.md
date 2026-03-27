@@ -2,18 +2,20 @@
 
 This folder contains full copied scripts for the Nature revision workflow:
 
-1. `01_CombineDungBeetleDatasets.R` (copied from `Scripts`)
-2. `02_FormatDBForNegBinom.R` (copied from `Scripts`)
-3. `03_FitModel.R` (copied from `Scripts`)
-4. `04_Nature_PredictAbundanceByHab.R` (copied from `Scripts/Nature_revision`)
-5. `05_Nature_ProcessScenarioOutcomes.R` (copied from `Scripts/Nature_revision`)
+0. `00_config.R` (shared path/input-output config for all NR2 scripts)
+1. `run_all.R` (single entrypoint to execute scripts 01 to 05 in order)
+2. `01_CombineDungBeetleDatasets.R` (copied from `Scripts`)
+3. `02_FormatDBForNegBinom.R` (copied from `Scripts`)
+4. `03_FitModel.R` (copied from `Scripts`)
+5. `04_Nature_PredictAbundanceByHab.R` (copied from `Scripts/Nature_revision`)
+6. `05_Nature_ProcessScenarioOutcomes.R` (copied from `Scripts/Nature_revision`)
 
 ## Replicability Path Rule
 
-Each script now has a clearly marked block:
+Each script now sources shared config:
 
-- `#---- NR2 path configuration ----`
-- `# NR2 INPUT: If running this script outside the project root, set this path explicitly.`
+- `source(file.path("Scripts", "Nature_Revision2", "00_config.R"))`
+- In `00_config.R`, set `project_root` if you are not running from the project root.
 
 Update `project_root` in that block when needed.  
 All script outputs are routed into:
@@ -95,6 +97,13 @@ All script outputs are routed into:
 ## Recommended Run Order
 
 Run scripts in numeric order from this folder:
+
+0. `00_config.R` (auto-sourced in scripts, no need to run manually)
+or run everything with:
+
+- `Rscript "Scripts/Nature_Revision2/run_all.R"`
+
+Manual order:
 
 1. `01_CombineDungBeetleDatasets.R`
 2. `02_FormatDBForNegBinom.R`
