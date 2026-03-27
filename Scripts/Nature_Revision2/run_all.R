@@ -9,7 +9,8 @@ script_sequence <- c(
   "02_FormatDBForNegBinom.R",
   "03_FitModel.R",
   "04_Nature_PredictAbundanceByHab.R",
-  "05_Nature_ProcessScenarioOutcomes.R"
+  "05_Nature_ProcessScenarioOutcomes.R",
+  "06_scenario_uncertainty_plots.R"
 )
 
 cat("Starting NR2 workflow\n")

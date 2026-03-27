@@ -458,12 +458,12 @@ for (w in seq_along(ab60_files)){
 best_scenario_folder <- "Outputs/BestScenarioUncertainty"
 
 #folder storing abudances across 60yrs
-ab60 <- "Outputs/Ab60perScenarioIterationJan25"
+ab60 <- "Outputs/Ab60perScenarioIteration"
 ab60files <- list.files(ab60, pattern = "*.rds", full.names = TRUE)
 
 #scenario start abundance
 #SL_60yrOcc 
-SL_occ60 <- readRDS("Outputs/SL_occ60yr_perIterationJan25.rds")
+SL_occ60 <- readRDS("Outputs/SL_occ60yr_perIteration.rds")
 SL_occ60_dt <- rbindlist(SL_occ60) %>%
   rename(SL_occ_60yr = occ_60yr)
 

@@ -3,12 +3,13 @@
 This folder contains full copied scripts for the Nature revision workflow:
 
 0. `00_config.R` (shared path/input-output config for all NR2 scripts)
-1. `run_all.R` (single entrypoint to execute scripts 01 to 05 in order)
+1. `run_all.R` (single entrypoint to execute scripts 01 to 06 in order)
 2. `01_CombineDungBeetleDatasets.R` (copied from `Scripts`)
 3. `02_FormatDBForNegBinom.R` (copied from `Scripts`)
 4. `03_FitModel.R` (copied from `Scripts`)
 5. `04_Nature_PredictAbundanceByHab.R` (copied from `Scripts/Nature_revision`)
 6. `05_Nature_ProcessScenarioOutcomes.R` (copied from `Scripts/Nature_revision`)
+7. `06_scenario_uncertainty_plots.R` (copied from `Scripts`)
 
 ## Replicability Path Rule
 
@@ -94,6 +95,23 @@ All script outputs are routed into:
   - Combines model-derived species responses with scenario trajectories.
   - Produces scenario-level uncertainty outputs and final biodiversity performance summaries.
 
+### 6) `06_scenario_uncertainty_plots.R`
+
+- Inputs
+  - `Outputs/NR2/rds/BestScenarioUncertainty/*.rds`
+  - `Outputs/NR2/rds/DBsppCategories.rds`
+  - `selected_file_index` inside script (choose which `BestScenario` file to plot)
+- Outputs
+  - `Outputs/NR2/figures/loser_dungbeetle_uncertainty_plot.pdf`
+  - `Outputs/NR2/figures/int1lgrp_dungbeetle_uncertainty_plot.pdf`
+  - `Outputs/NR2/figures/all_sp_uncertainty_plot.pdf`
+  - `Outputs/NR2/figures/all_sp_chunk1.pdf`
+  - `Outputs/NR2/figures/all_sp_chunk2.pdf`
+  - Same filenames exported as `.png`
+- Summary
+  - Summarises posterior uncertainty in whether logging or plantation strategies are best per species.
+  - Generates uncertainty figures for loser species, intermediate group, and all species.
+
 ## Recommended Run Order
 
 Run scripts in numeric order from this folder:
@@ -110,3 +128,4 @@ Manual order:
 3. `03_FitModel.R`
 4. `04_Nature_PredictAbundanceByHab.R`
 5. `05_Nature_ProcessScenarioOutcomes.R`
+6. `06_scenario_uncertainty_plots.R`
