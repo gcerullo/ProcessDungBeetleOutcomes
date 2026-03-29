@@ -203,42 +203,35 @@ ggsave(file.path(nr2_figures_dir, "all_sp_chunk2.png"),
 
 # ##########################################
 # Doesnt seem to be much of an effect of production target on uncertainty
-
-
-# #For  loser species, plot uncertainty for multiple production targets 
-# process_data <- function(df, production_threshold, sppCategories ) {
+# 
+# 
+# #For  loser species, plot uncertainty for multiple production targets
+# process_data <- function(df, production_threshold, sppCategories) {
 #   df_filtered <- df %>% filter(production_target > production_threshold)
 #   
-#   unique_combinations <- df_filtered %>%
-#     group_by(species) %>%
-#     count() %>%
-#     ungroup() %>%
-#     select(n) %>%
-#     unique() %>%
-#     pull()
-#   
 #   df_sum <- df_filtered %>%
-#     unique() %>%
+#     distinct() %>%
 #     group_by(species, treatment_strategy) %>%
-#     count() %>%
-#     mutate(percentage = n / unique_combinations) %>%
-#     left_join(sppCategories, by = "species") %>% 
-#     #removed if unmarched in name of spp
-#   
-# 
-#   loser_spp <- df_sum %>%
+#     count(name = "n") %>%
+#     group_by(species) %>%
+#     mutate(percentage = n / sum(n)) %>%   # safer than dividing by unique_combinations vector
 #     ungroup() %>%
+#     left_join(sppCategories, by = "species")
+#   
+#   loser_spp <- df_sum %>%
 #     filter(spp_category == "loser") %>%
-#     select(species) %>%
-#     unique() %>%
-#     pull()
+#     distinct(species) %>%
+#     pull(species)
 #   
 #   sp_prefer_plantation_dominated_production <- df_sum %>%
-#     filter(treatment_strategy == "plantation" & percentage > 0.5)
+#     filter(treatment_strategy == "plantation", percentage > 0.5)
 #   
-#   list(df_sum = df_sum, loser_spp = loser_spp)
+#   list(
+#     df_sum = df_sum,
+#     loser_spp = loser_spp,
+#     sp_prefer_plantation_dominated_production = sp_prefer_plantation_dominated_production
+#   )
 # }
-# 
 # 
 # generate_plot <- function(df_sum, species_filter, show_species_labels = FALSE) {
 #   df_sum %>%
@@ -256,7 +249,7 @@ ggsave(file.path(nr2_figures_dir, "all_sp_chunk2.png"),
 #     scale_fill_manual(
 #       values = c("logging" = "#E69F00", "plantation" = "#56B4E9"),
 #       labels = c("Selective-logging Best", "Plantations Best")  # Legend labels
-#       
+# 
 #     ) +
 #     labs(
 #       x = NULL,
@@ -301,7 +294,7 @@ ggsave(file.path(nr2_figures_dir, "all_sp_chunk2.png"),
 #   plot75_loser + labs(title = "   Production > 0.75"),
 #   ncol = 4,  # Arrange the plots in a single column
 #   labels = c("A", "B", "C"),  # Add labels (optional)
-#   label_size = 14,  # Size of the labels
-#   rel_widths = c(2.5, 1, 1)  # Adjust the relative width of the first plot
+#   label_size = 14 # Size of the labels
+# #  rel_widths = c(2.5, 1, 1)  # Adjust the relative width of the first plot
 # )
 
