@@ -77,13 +77,17 @@ runtime <- system.time({
 #read
 full_model <- readRDS(file.path(nr2_models_dir, "DB_zi_full.rds"))
 
+# Quick PPC settings (increase for final diagnostics)
+ppcheck_draws_quick <- 50
+run_heavy_residual_check <- FALSE
+
 ## Posterior predictive distribution check (dark and blue lines should look similar)
-pp_check(full_model)
-pp_check(full_model) + coord_cartesian(xlim = c(0, 100))
+pp_check(full_model, ndraws = ppcheck_draws_quick)
+pp_check(full_model, ndraws = ppcheck_draws_quick) + coord_cartesian(xlim = c(0, 100))
 
 ## Distributions mean check dark blue line is the mean of your data, historgram is the mean of
 ## the predicted distr (should be focsed around the dark blue line)
-pp_check(full_model, type = "stat")
+pp_check(full_model, type = "stat", ndraws = ppcheck_draws_quick)
 
 ## Proportion of zeroes in real and simulated data - super important for these data 
 ## types where there is a bunch of zeros
@@ -91,11 +95,45 @@ prop_zero <- function(x) {
   sum(x == 0)/length(x)
   }
 
-ppc_stat(y = sum_df$sum_count, yrep = posterior_predict(full_model, draws = 100), stat="prop_zero")
+ppc_stat(
+  y = sum_df$sum_count,
+  yrep = posterior_predict(full_model, draws = ppcheck_draws_quick),
+  stat = "prop_zero"
+)
 
 ## Residual distribution (might take some time to run...) should just be centred on zero with 
 ## random uncertainty (+/-) that shows no trends or patterns.
-sum_df %>%
-  add_residual_draws(full_model) %>%
-  ggplot(aes(x = .row, y = .residual)) +
-  stat_pointinterval(alpha = .4, colour = "lightsteelblue3") + theme_classic() 
+if (run_heavy_residual_check) {
+  sum_df %>%
+    add_residual_draws(full_model) %>%
+    ggplot(aes(x = .row, y = .residual)) +
+    stat_pointinterval(alpha = .4, colour = "lightsteelblue3") + theme_classic()
+}
+
+# Built-in habitat-level grouped posterior predictive checks (means and SDs) ####
+# We use bayesplot grouped PPC directly because habitat entered the model as dummy variables.
+yrep_grouped <- posterior_predict(full_model, draws = ppcheck_draws_quick)
+
+p_mean_hab <- bayesplot::ppc_stat_grouped(
+  y = sum_df$sum_count,
+  yrep = yrep_grouped,
+  group = sum_df$habitat,
+  stat = "mean"
+) +
+  theme_classic() +
+  labs(title = "Grouped PPC by habitat: mean")
+
+p_sd_hab <- bayesplot::ppc_stat_grouped(
+  y = sum_df$sum_count,
+  yrep = yrep_grouped,
+  group = sum_df$habitat,
+  stat = "sd"
+) +
+  theme_classic() +
+  labs(title = "Grouped PPC by habitat: sd")
+
+pdf(file.path(nr2_figures_dir, "habitat_mean_sd_ppcheck_builtin.pdf"), width = 11, height = 8.5)
+print(p_mean_hab)
+print(p_sd_hab)
+dev.off()
+

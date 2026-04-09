@@ -63,7 +63,7 @@ source(file.path(inputs_dir, "ScenarioParams.R"))
 #this is calculated in PredictAbundanceByHab.R
 DBs <- readRDS(file.path(nr2_rds_dir, "DBs_abundance_by_habAge_iterations.rds"))
 DBs <- remove_specific_species(DBs)
-
+unique(DBs$species)
 
 #-----read in scenarios without delays to get scenario composition -------
 scenarios <- readRDS(file.path(inputs_dir, "MasterAllScenarios.rds"))
@@ -76,7 +76,19 @@ rm(scenarios)
 
 #get the csv file name for each scenario 
 scenario_folder <- file.path(inputs_dir, "ScenariosWithDelaysCSVs")
-csv_files <- list.files(scenario_folder, pattern = "*.csv", full.names = TRUE)
+
+# Guard against duplicated file suffixes (e.g., ".csv.csv").
+dup_csv_files <- list.files(scenario_folder, pattern = "\\.csv\\.csv$", full.names = TRUE)
+if (length(dup_csv_files) > 0) {
+  for (old_path in dup_csv_files) {
+    new_path <- sub("\\.csv\\.csv$", ".csv", old_path)
+    if (!file.exists(new_path)) {
+      file.rename(old_path, new_path)
+    }
+  }
+}
+
+csv_files <- list.files(scenario_folder, pattern = "\\.csv$", full.names = TRUE)
 
 
 #define folder for saving, per scenario, final dung beetle outputs (time-averaged-abundance per scenario and species) 
@@ -193,7 +205,30 @@ function_scenario_60yr_uncertainty <- function(single_scenario_i, processed_beet
 
 #-----read in scenario group and define harvest delay ------
 #get the csv file name for each scenario 
-csv_files <- list.files(scenario_folder, pattern = "*.csv", full.names = TRUE)
+csv_files <- list.files(scenario_folder, pattern = "\\.csv$", full.names = TRUE)
+if (length(csv_files) == 0) {
+  stop("No scenario CSV files found in: ", scenario_folder, call. = FALSE)
+}
+
+# Preflight: check that files are actually byte-readable, not just metadata-visible.
+csv_readable <- vapply(csv_files, function(f) {
+  con <- file(f, "rb")
+  on.exit(close(con), add = TRUE)
+  bytes <- readBin(con, "raw", n = 256)
+  length(bytes) > 0
+}, logical(1))
+
+if (!all(csv_readable)) {
+  unreadable <- csv_files[!csv_readable]
+  stop(
+    paste0(
+      "Some scenario files are not byte-readable (likely cloud placeholders/offline files):\n",
+      paste(unreadable, collapse = "\n"),
+      "\n\nEnsure these files are available locally (e.g., OneDrive: 'Always keep on this device') and try again."
+    ),
+    call. = FALSE
+  )
+}
 
 #DEFINE DELAY FILTER ####
 #(we have to subset only a few delay schedules to improve computational efficiency)
@@ -227,7 +262,7 @@ clusterEvalQ(cl, {
 for (k in seq_along(csv_files)){
   
   #read in single scenario type and add total points   
-  scenario_group  <- read.csv(csv_files[[k]]) %>% as.data.table() %>% 
+  scenario_group  <- read.csv(csv_files[[k]], skipNul = TRUE) %>% as.data.table() %>% 
     mutate(num_points = num_parcels*DB_CF) %>%  
     filter(harvest_delay == delayFilters)  # only filter subset of delay to enhance efficieny 
   
@@ -248,7 +283,7 @@ for (k in seq_along(csv_files)){
                       "function_scenario_60yr_uncertainty", "harvest_window", "total_landscape_pts"))
   
   # Execute in parallel
-  result_list <- foreach(zeta = 1:nrow(combinations), .packages = c('data.table', 'dplyr')) %dopar% {
+  result_list <- foreach(zeta = seq_len(nrow(combinations)), .packages = c('data.table', 'dplyr')) %dopar% {
     single_scenario_name <- combinations$index[zeta]
     processed_beetles_name <- combinations$species[zeta]
     
@@ -274,6 +309,113 @@ for (k in seq_along(csv_files)){
 
 # Stop the cluster after finishing all tasks
 stopCluster(cl)
+
+# ---------- OPTIONAL FAST PILOT (keeps original code above unchanged) ----------
+# Goal: same output structure as above (`list` of per-combination data.tables),
+# but faster by batching combinations into chunks per worker.
+run_fast_pilot <- TRUE
+fast_pilot_chunk_size <- 250L
+fast_pilot_num_cores <- max(1L, detectCores() - 1L)
+fast_pilot_output_folder <- file.path(nr2_rds_dir, "Ab60perScenarioIteration_fastPilot")
+dir.create(fast_pilot_output_folder, recursive = TRUE, showWarnings = FALSE)
+
+if (run_fast_pilot) {
+  cat("\n[FAST PILOT] Starting fast pilot run\n")
+  cat("[FAST PILOT] Cores:", fast_pilot_num_cores, "| Chunk size:", fast_pilot_chunk_size, "\n")
+  cl_fast <- makeCluster(fast_pilot_num_cores)
+  registerDoParallel(cl_fast)
+
+  clusterEvalQ(cl_fast, {
+    library(data.table)
+    library(dplyr)
+  })
+
+  for (k in seq_along(csv_files)) {
+    scenario_t0 <- Sys.time()
+    cat("\n[FAST PILOT] Scenario", k, "of", length(csv_files), ":", basename(csv_files[[k]]), "\n")
+
+    # Keep the same filtering logic as the original block for output consistency.
+    scenario_group <- read.csv(csv_files[[k]], skipNul = TRUE) %>% as.data.table() %>%
+      mutate(num_points = num_parcels * DB_CF) %>%
+      filter(harvest_delay == delayFilters)
+
+    # Same naming logic, but write into fast-pilot folder.
+    rds_file_name <- sub(".csv$", "", unique(scenario_group$scenarioName))
+    rds_file_name <- paste(unique(rds_file_name), "ab60.rds", sep = "_")
+    rds_file_path <- file.path(fast_pilot_output_folder, rds_file_name)
+
+    unique_index <- scenario_group %>% select(index) %>% unique() %>% pull()
+    unique_spp <- processed_beetles %>% select(species) %>% unique() %>% pull()
+    combinations <- as.data.table(expand.grid(
+      index = unique_index,
+      species = unique_spp,
+      stringsAsFactors = FALSE
+    ))
+    cat("[FAST PILOT] Rows in scenario_group:", nrow(scenario_group),
+        "| combinations:", nrow(combinations), "\n")
+
+    if (nrow(combinations) == 0) {
+      saveRDS(list(), file = rds_file_path)
+      cat("Fast pilot completed scenario", k, "(no combinations)\n")
+      next
+    }
+
+    # Pre-split once per file to avoid repeated filtering cost inside workers.
+    scenario_by_index <- split(scenario_group, by = "index", keep.by = TRUE, sorted = FALSE)
+    beetles_by_species <- split(processed_beetles, by = "species", keep.by = TRUE, sorted = FALSE)
+
+    # Chunk combinations to reduce foreach dispatch overhead.
+    chunk_ids <- ((seq_len(nrow(combinations)) - 1L) %/% fast_pilot_chunk_size) + 1L
+    combination_chunks <- split(combinations, chunk_ids)
+    cat("[FAST PILOT] Total chunks:", length(combination_chunks), "\n")
+
+    clusterExport(
+      cl_fast,
+      c(
+        "combination_chunks", "scenario_by_index", "beetles_by_species",
+        "function_scenario_60yr_uncertainty", "harvest_window", "total_landscape_pts"
+      ),
+      envir = environment()
+    )
+    cat("[FAST PILOT] Exported objects to workers, starting chunk processing...\n")
+
+    result_chunks <- foreach(
+      chunk_i = seq_along(combination_chunks),
+      .packages = c("data.table", "dplyr")
+    ) %dopar% {
+      chunk_dt <- combination_chunks[[chunk_i]]
+      local_results <- vector("list", nrow(chunk_dt))
+
+      for (j in seq_len(nrow(chunk_dt))) {
+        idx_val <- as.character(chunk_dt$index[j])
+        spp_val <- as.character(chunk_dt$species[j])
+
+        single_scenario_i <- scenario_by_index[[idx_val]]
+        processed_beetles_i <- beetles_by_species[[spp_val]]
+
+        local_results[[j]] <- function_scenario_60yr_uncertainty(
+          single_scenario_i,
+          processed_beetles_i
+        )
+      }
+
+      local_results
+    }
+
+    result_list_fast <- unlist(result_chunks, recursive = FALSE, use.names = FALSE)
+    cat("[FAST PILOT] Chunk processing complete. Results:", length(result_list_fast), "\n")
+    saveRDS(result_list_fast, file = rds_file_path)
+    cat("[FAST PILOT] Saved:", rds_file_path, "\n")
+
+    rm(result_chunks, result_list_fast, scenario_by_index, beetles_by_species, combinations)
+    gc(verbose = FALSE)
+    scenario_elapsed <- round(as.numeric(difftime(Sys.time(), scenario_t0, units = "secs")), 1)
+    cat("[FAST PILOT] Completed scenario", k, "in", scenario_elapsed, "sec\n")
+  }
+
+  stopCluster(cl_fast)
+  cat("\n[FAST PILOT] Finished all scenarios\n")
+}
 
 
 # #!!! change folder name here when running on desktop!!!
@@ -378,7 +520,7 @@ stopCluster(cl)
 #cap <- 1.5 # don't allow scenario occ to be more than 1.5 starting landscape occ [only used if calculating geometric mean]
 sppCategories <- readRDS(file.path(nr2_rds_dir, "DBsppCategories.rds"))
 sppCategories<- as.data.table(sppCategories)
-abundance_folder <- file.path(nr2_rds_dir, "Ab60perScenarioIteration")
+abundance_folder <- file.path(nr2_rds_dir, "Ab60perScenarioIteration_fastPilot")
 ab60_files <- list.files(abundance_folder, pattern = "*.rds", full.names = TRUE)
 
 
@@ -392,7 +534,7 @@ SL_occ60_dt <- rbindlist(SL_occ60) %>%
 SL_all_primary_dt<- SL_occ60_dt %>% filter(scenarioStart == "all_primary") 
 
 # Allocate folder for summarised results (geometric means and relative abundance )
-relative_ab_folder <- file.path(nr2_rds_dir, "RelativeAbundancePerIteration")
+relative_ab_folder <- file.path(nr2_rds_dir, "RelativeAbundancePerIteration_fastPilot")
 dir.create(relative_ab_folder, recursive = TRUE, showWarnings = FALSE)
 
 
@@ -471,11 +613,11 @@ for (w in seq_along(ab60_files)){
 ###################################################
 #FOR UNCERTAINTY -calculate proportion of scenarios where logging is better than plantations
 #set older for storing best scenario (logging or plantation) for each production target
-best_scenario_folder <- file.path(nr2_rds_dir, "BestScenarioUncertainty")
+best_scenario_folder <- file.path(nr2_rds_dir, "BestScenarioUncertainty_fastPilot")
 dir.create(best_scenario_folder, recursive = TRUE, showWarnings = FALSE)
 
 #folder storing abudances across 60yrs
-ab60 <- file.path(nr2_rds_dir, "Ab60perScenarioIteration")
+ab60 <- file.path(nr2_rds_dir, "Ab60perScenarioIteration_fastPilot")
 ab60files <- list.files(ab60, pattern = "*.rds", full.names = TRUE)
 
 #scenario start abundance
@@ -534,7 +676,6 @@ for (w in seq_along(ab60files)){
   #save the output to an rds folder 
   saveRDS(best_scenario, file = best_scenario_file_path)
 }
-
 #This would be an example of paired scenario draws (ie based on the same model params)
 PairedExample <- occ_comb %>% filter(species == "Anoctus.laevis" & iteration == '459' & production_target == 0.39)
 
@@ -545,7 +686,7 @@ x %>% filter(rel_occ == max(rel_occ))
 #--------  read in relative abundance ----------------------
 #read in data that has been baselined the fully old-growth starting landscape 
 # Allocate folder for summarised results 
-relative_ab_folder <- file.path(nr2_rds_dir, "RelativeAbundancePerIteration")
+relative_ab_folder <- file.path(nr2_rds_dir, "RelativeAbundancePerIteration_fastPilot")
 relAb_files <- list.files(relative_ab_folder, pattern = "^OGbaseline.*\\.rds$", full.names = TRUE)
 rel_abs <- lapply(relAb_files, readRDS)
 rel_occ_df <- rbindlist(rel_abs) %>%  
@@ -582,5 +723,5 @@ output <- final_relOcc %>% select(index, production_target,
 scenarioNames <- scenario_composition %>% select(index,scenarioStart,production_target, scenarioName) %>% unique()
 output <- output %>% left_join(scenarioNames)
 
-saveRDS(output, file.path(nr2_rds_dir, "MasterDBPerformance.rds"))
+saveRDS(output, file.path(nr2_rds_dir, "MasterDBPerformance_fastPilot.rds"))
 

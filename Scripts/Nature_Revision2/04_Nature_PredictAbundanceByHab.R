@@ -27,7 +27,7 @@ beetles <- read.csv(file.path(nr2_rds_dir, "full_DB_dataframeFor_BRMS_analysis_w
 
 # Without singletons and doubletons 
 #beetles <- read.csv(file.path(nr2_rds_dir, "full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv"))
-
+unique(beetles$spp)
 #read in model Zero-inflated negative binom ouput 
 rmodel<- readRDS(file.path(nr2_models_dir, "DB_zi_full.rds"))
 
@@ -131,19 +131,37 @@ modelDraws <- as.data.table(modelDraws)
 
 # 
 # # ---- visualise the mean model predictions per spp ------------
+
+#Warning; out-of-domain predictions (ie in first 20 yrs post logging) look quite strange in restored and 
+#once-logged habitat and are probably unsafe to use. 
+
 # 
-# unique_spp <- beetles %>%ungroup %>%  select(spp) %>% unique() %>% slice(1:50) %>% pull()
+# # unique_spp <- beetles %>%ungroup %>%  select(spp) %>% unique() %>% slice(1:50) %>% pull()
+#  unique_spp2 <- beetles %>%ungroup %>%  select(spp) %>% unique() %>% slice(51:100) %>% pull()
+# 
 # test <- modelDraws %>% filter(species %in% unique_spp) %>%
-#   filter(!habitat == "restored") %>% 
+#  # filter(!habitat == "restored") %>%
 #   group_by(species, functionalhabAge,
 #            habitat) %>% summarise(mean = mean(abundance),
 #                                   lower_percentile = quantile(abundance, 0.05),
 #                                   upper_percentile = quantile(abundance, 0.95))# %>% filter(!habitat == "restored")
+# test2 <- modelDraws %>% filter(species %in% unique_spp2) %>%
+#  # filter(!habitat == "restored") %>%
+#   group_by(species, functionalhabAge,
+#            habitat) %>% summarise(mean = mean(abundance),
+#                                   lower_percentile = quantile(abundance, 0.05),
+#                                   upper_percentile = quantile(abundance, 0.95))# %>% filter(!habitat == "restored")
+# 
 # ggplot(test, aes(functionalhabAge, mean, colour = habitat)) +
-#   geom_line() + 
+#   geom_line() +
 #   #  geom_ribbon(aes(ymin = lower_percentile, ymax = upper_percentile),fill = NA) +
 #   facet_wrap(~species, scales = "free")
-
+# 
+# 
+# ggplot(test2, aes(functionalhabAge, mean, colour = habitat)) +
+#   geom_line() +
+#   #  geom_ribbon(aes(ymin = lower_percentile, ymax = upper_percentile),fill = NA) +
+#   facet_wrap(~species, scales = "free")
 
 #------------ process draws to provide full data and platue unobserved years  -----------------------
 
@@ -215,13 +233,72 @@ process_beetle_data_late_only <- function(x) {
     filter(functionalhabAge <= 60)
 }
 
+# no out-of-domain predictions
+process_beetle_data_early_late <- function(x) {
+  ages <- data.frame(functionalhabAge = seq(0, 60))
+  missing1L_R_rs <- data.frame(functionalhabAge = seq(0, 20))
+  missing20yrsR <- data.frame(functionalhabAge = seq(40, 60))
+
+  md <- x %>%
+    mutate(habitat = case_when(
+      habitat == "eucalyptus" ~ "eucalyptus_current",
+      TRUE ~ habitat
+    ))
+
+  # Early plateau (0-20) for once-logged and restored using year-20 values.
+  beetles_1L_20 <- md %>%
+    filter(habitat == "once-logged", functionalhabAge == 20) %>%
+    select(-functionalhabAge) %>%
+    group_by(species, habitat, iteration) %>%
+    crossing(missing1L_R_rs)
+
+  beetles_R_20 <- md %>%
+    filter(habitat == "restored", functionalhabAge == 20) %>%
+    select(-functionalhabAge) %>%
+    group_by(species, habitat, iteration) %>%
+    crossing(missing1L_R_rs)
+
+  md <- md %>%
+    filter(!(habitat %in% c("once-logged", "restored") & functionalhabAge < 20)) %>%
+    bind_rows(beetles_1L_20, beetles_R_20)
+
+  # Late plateau for restored using year-40 values.
+  beetles_R_40 <- md %>%
+    filter(habitat == "restored", functionalhabAge == 40) %>%
+    select(-functionalhabAge) %>%
+    group_by(species, habitat, iteration) %>%
+    crossing(missing20yrsR)
+
+  md <- md %>%
+    filter(!(habitat == "restored" & functionalhabAge > 40)) %>%
+    bind_rows(beetles_R_40)
+
+  md <- md %>%
+    filter(!(habitat %in% c("eucalyptus_current", "eucalyptus_improved") & functionalhabAge > 6))
+
+  beetles_deforested <- md %>%
+    filter(habitat %in% c("eucalyptus_current", "albizia_current"),
+           functionalhabAge %in% c(0, 1, 2)) %>%
+    select(-functionalhabAge, -habitat) %>%
+    group_by(species, iteration) %>%
+    mutate(abundance = mean(abundance)) %>%
+    crossing(ages) %>%
+    mutate(habitat = "deforested")
+
+  md %>%
+    bind_rows(beetles_deforested) %>%
+    filter(functionalhabAge <= 60)
+}
+
 processed_beetles_late_only <- process_beetle_data_late_only(modelDraws)
+processed_beetles_early_late <- process_beetle_data_early_late(modelDraws)
 processed_beetles_no_plateau <- process_beetle_data_no_plateau(modelDraws)
 
-# Use late-only plateau as the main downstream dataset in this script.
-processed_beetles <- processed_beetles_late_only
+# Use no out-of-domain predictions in the the main downstream dataset in this script.
+processed_beetles <- processed_beetles_early_late
 
 saveRDS(processed_beetles_late_only, file.path(nr2_rds_dir, "processedOccBeetles_lateOnlyPlateau.rds"))
+saveRDS(processed_beetles_early_late, file.path(nr2_rds_dir, "processedOccBeetles_earlyLatePlateau.rds"))
 saveRDS(processed_beetles_no_plateau, file.path(nr2_rds_dir, "processedOccBeetles_noPlateau.rds"))
 # 
 # 
@@ -320,20 +397,24 @@ saveRDS(processed_beetles_no_plateau, file.path(nr2_rds_dir, "processedOccBeetle
 # 
 # curves_no_plateau <- summarise_curves_for_plot(processed_beetles_no_plateau, "No plateau")
 # curves_plateau_late <- summarise_curves_for_plot(processed_beetles_late_only, "Plateau (late only)")
+# curves_plateau_early_late <- summarise_curves_for_plot(processed_beetles_early_late, "Plateau (early + late)")
 # 
 # primary_no_plateau <- primary_points_for_plot(processed_beetles_no_plateau, "No plateau")
 # primary_plateau_late <- primary_points_for_plot(processed_beetles_late_only, "Plateau (late only)")
+# primary_plateau_early_late <- primary_points_for_plot(processed_beetles_early_late, "Plateau (early + late)")
 # 
 # transition_no_plateau <- build_transition_segments(curves_no_plateau, primary_no_plateau)
 # transition_plateau_late <- build_transition_segments(curves_plateau_late, primary_plateau_late)
+# transition_plateau_early_late <- build_transition_segments(curves_plateau_early_late, primary_plateau_early_late)
 # 
 # p_no_plateau <- plot_curves_method(curves_no_plateau, primary_no_plateau, transition_no_plateau, "No plateau")
 # p_plateau_late <- plot_curves_method(curves_plateau_late, primary_plateau_late, transition_plateau_late, "Plateau (late only)")
+# p_plateau_early_late <- plot_curves_method(curves_plateau_early_late, primary_plateau_early_late, transition_plateau_early_late, "Plateau (early + late)")
 # 
 # curve_shape_comparison <- cowplot::plot_grid(
-#   p_no_plateau, p_plateau_late,
-#   ncol = 2,
-#   labels = c("A", "B"),
+#   p_no_plateau, p_plateau_late, p_plateau_early_late,
+#   ncol = 3,
+#   labels = c("A", "B", "C"),
 #   label_size = 12
 # )
 # 
@@ -350,9 +431,15 @@ saveRDS(processed_beetles_no_plateau, file.path(nr2_rds_dir, "processedOccBeetle
 # )
 # 
 # ggsave(
-#   file.path(nr2_figures_dir, "beetle_curve_shape_comparison_noPlateau_vs_lateOnlyPlateau.png"),
+#   file.path(nr2_figures_dir, "beetle_curves_early_late_plateau.png"),
+#   p_plateau_early_late,
+#   width = 210, height = 210, units = "mm"
+# )
+# 
+# ggsave(
+#   file.path(nr2_figures_dir, "beetle_curve_shape_comparison_noPlateau_vs_lateOnly_vs_earlyLate.png"),
 #   curve_shape_comparison,
-#   width = 420, height = 210, units = "mm"
+#   width = 630, height = 210, units = "mm"
 # )
 
 
@@ -434,12 +521,28 @@ logging_transition_seed <- logging_pred_df %>%
   select(species, habitat, primary_mid, first_age = time_since_logging, first_mid = mid) %>%
   distinct()
 
+twice_logging_transition_seed <- logging_pred_df %>%
+  filter(habitat == "Twice logged", time_since_logging == 10) %>%
+  select(species, habitat, primary_mid, first_age = time_since_logging, first_mid = mid) %>%
+  distinct()
+
 logging_transition <- bind_rows(
   logging_transition_seed %>%
     transmute(species, habitat, time_since_logging = 0, mid = primary_mid),
   logging_transition_seed %>%
     transmute(species, habitat, time_since_logging = first_age, mid = first_mid)
 ) %>%
+  arrange(species, habitat, time_since_logging)
+
+logging_transition_twice <- bind_rows(
+  twice_logging_transition_seed %>%
+    transmute(species, habitat, time_since_logging = 0, mid = primary_mid),
+  twice_logging_transition_seed %>%
+    transmute(species, habitat, time_since_logging = first_age, mid = first_mid)
+) %>%
+  arrange(species, habitat, time_since_logging)
+
+logging_transition_all <- bind_rows(logging_transition, logging_transition_twice) %>%
   arrange(species, habitat, time_since_logging)
 
 # ---- Plantation figure ----
@@ -471,10 +574,7 @@ logging_fig <- logging_pred_df %>%
   geom_line(alpha = .5, col = 'grey0') +
   geom_point(data = logging_primary_points,
              alpha = .5, col = 'grey0') +
-  geom_line(data = logging_transition,
-            lty = 'longdash', alpha = .3, col = 'grey0') +
-  geom_line(data = logging_pred_df %>%
-              filter(habitat == "Twice logged", time_since_logging <= 10),
+  geom_line(data = logging_transition_all,
             lty = 'longdash', alpha = .3, col = 'grey0') +
   facet_wrap(~habitat, nrow = 1) +
   theme_bw() +
@@ -534,7 +634,6 @@ dbMeans <- processed_beetles[, .(abundance = median(abundance),
                                  ab_lwr = quantile(abundance, 0.2),
                                  ab_upr = quantile(abundance, 0.8)),
                              by = .(species, habitat, functionalhabAge)]
-
 # # # Top 5 rows per species by abundance across habitat and age.
 # top5_abundance_rows_by_species <- dbMeans %>%
 #   group_by(species) %>%

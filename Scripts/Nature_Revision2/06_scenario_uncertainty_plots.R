@@ -16,7 +16,7 @@ source(file.path("Scripts", "Nature_Revision2", "00_config.R"))
 #read in inputs 
 #.......................................
 #read in scenario performancy  
-rds_folder <- file.path(nr2_rds_dir, "BestScenarioUncertainty")
+rds_folder <- file.path(nr2_rds_dir, "BestScenarioUncertainty_fastPilot")
 rds_files <- list.files(rds_folder, pattern = "*.rds", full.names = TRUE)
 
 sppCategories <- readRDS(file.path(nr2_rds_dir, "DBsppCategories.rds"))
