@@ -560,7 +560,7 @@ plantation_fig <- plantation_pred_df %>%
         strip.background = element_blank(),
         axis.text = element_text(colour = "black"),
         panel.grid = element_blank()) +
-  labs(y = "Relative abundance", x = "Plantation age") +
+  labs(y = "Abundance", x = "Plantation age") +
   ylim(0,30)+
   
   scale_x_continuous(breaks = c(0,5,10),
