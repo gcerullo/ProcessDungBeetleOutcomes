@@ -1,3 +1,21 @@
+# =============================================================================
+# Nature_Revision2 / 04_Nature_PredictAbundanceByHab.R
+# -----------------------------------------------------------------------------
+# I pull posterior expected abundances by species, habitat and age from my fitted
+# model, apply my plateau rules, derive species categories, and save inputs for
+# the scenario scripts plus a manuscript-style curve figure.
+#
+# Inputs I read:
+#   - Outputs/NR2/rds/full_DB_dataframeFor_BRMS_analysis_withSingletons.csv
+#   - Outputs/NR2/models/DB_zi_full.rds
+#
+# Outputs I write (main):
+#   - Outputs/NR2/rds/DBs_abundance_by_habAge_iterations.rds
+#   - Outputs/NR2/rds/DBsppCategories.rds
+#   - Outputs/NR2/rds/processedOccBeetles_*.rds (plateau variants I keep for checks)
+#   - Outputs/NR2/figures/all_beetle_curves_clipped_40yrs.png
+# =============================================================================
+
 # Gc 26.11.24
 #Process model outputs - e.g. extract model abundance estimates per habitat type and age.
 
@@ -552,17 +570,16 @@ plantation_fig <- plantation_pred_df %>%
   geom_line(alpha = .5, col = 'grey0') +
   geom_point(data = plantation_primary_points,
              alpha = .5, col = 'grey0') +
-  geom_line(data = plantation_transition,
-            lty = 'longdash', alpha = .5, col = 'grey0') +
+  # geom_line(data = plantation_transition,
+  #           lty = 'longdash', alpha = .5, col = 'grey0') +
   facet_wrap(~habitat, nrow = 1) +
   theme_bw() +
   theme(strip.text = element_text(hjust = 0, face = "bold"),
         strip.background = element_blank(),
         axis.text = element_text(colour = "black"),
         panel.grid = element_blank()) +
-  labs(y = "Abundance", x = "Plantation age") +
+  labs( y = NULL, x = "Plantation age") +
   ylim(0,30)+
-  
   scale_x_continuous(breaks = c(0,5,10),
                      labels = c("Primary",5,10))
 
@@ -592,15 +609,16 @@ logging_fig <- logging_pred_df %>%
 
 # ---- Combine panels ----
 all_beetle_curves <- cowplot::plot_grid(logging_fig, plantation_fig,
-                                        ncol = 1,
-                                        rel_heights = c(1.2, 0.8))
+                                        rel_widths  = c(1.2, 0.8))
 
-ggsave(file.path(nr2_figures_dir, "all_beetle_curves_clipped_40yrs.png"),
-       all_beetle_curves,
-       units = "mm",
-       height = 297,
-       width = 210)
-
+ggsave(
+  file.path(nr2_figures_dir, "all_beetle_curves_clipped_40yrs.png"),
+  all_beetle_curves,
+  units = "mm",
+  width = 230,
+  height = 120,
+  dpi = 600
+)
 # 
 # #----plot processed data -----
 # restored <- processed_beetles %>% filter(habitat == "restored")   #restored data seems a bit high; come back to

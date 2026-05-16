@@ -1,3 +1,17 @@
+# =============================================================================
+# Nature_Revision2 / 02_FormatDBForNegBinom.R
+# -----------------------------------------------------------------------------
+# I take the combined NR2 export and format it into trap-level sums for brms,
+# including optional filters for singletons/doubletons.
+#
+# Inputs I read:
+#   - Outputs/NR2/rds/dungBeetlesForAbundanceAnalysis.csv
+#
+# Outputs I write:
+#   - Outputs/NR2/rds/full_DB_dataframeFor_BRMS_analysis_withSingletons.csv
+#   - Outputs/NR2/rds/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv
+# =============================================================================
+
 #GC 17/06/24 
 
 #Process abundances ready for model fitting 

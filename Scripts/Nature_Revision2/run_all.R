@@ -1,6 +1,18 @@
-# Run the full NR2 workflow from one script.
+# =============================================================================
+# Nature_Revision2 / run_all.R
+# -----------------------------------------------------------------------------
+# I wrote this so I can run my full NR2 pipeline in one go by sourcing each
+# script in order.
+#
+# Inputs:  all scripts listed below must exist under Scripts/Nature_Revision2/
+# Outputs: whatever each numbered script writes (see their headers); I do not
+#           save anything extra from this file alone.
+#
 # Usage (from project root):
 #   Rscript "Scripts/Nature_Revision2/run_all.R"
+# =============================================================================
+
+# Run the full NR2 workflow from one script.
 
 scripts_dir <- file.path("Scripts", "Nature_Revision2")
 

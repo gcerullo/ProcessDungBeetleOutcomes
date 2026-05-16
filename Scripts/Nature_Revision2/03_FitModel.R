@@ -1,3 +1,18 @@
+# =============================================================================
+# Nature_Revision2 / 03_FitModel.R
+# -----------------------------------------------------------------------------
+# I fit my zero-inflated negative binomial model in brms and save the fitted
+# object, plus a quick habitat-level PPC figure.
+#
+# Inputs I read:
+#   - Outputs/NR2/rds/full_DB_dataframeFor_BRMS_analysis_withoutSingletonsAndDoubletons.csv
+#        (I can switch to the with-singletons file in the script if I want)
+#
+# Outputs I write:
+#   - Outputs/NR2/models/DB_zi_full.rds
+#   - Outputs/NR2/figures/habitat_mean_sd_ppcheck_builtin.pdf
+# =============================================================================
+
 #GC 17/06/24
 #Fit zero-inflated negative binomial model to dung beetle data
 
@@ -29,6 +44,10 @@ sum_df <- sum_df %>%
          restored = ifelse(habitat == "restored", 1, 0),
          Year_factor = as.factor(sample_year))
 
+#twice and priamry esesntially fixed at time 0
+sum_df %>%
+  dplyr::filter(habitat %in% c("primary", "twice-logged")) %>%
+  dplyr::distinct(habitat, time_since_intervention, time_since_intervention_ctr)
 
 # final model  ####
 

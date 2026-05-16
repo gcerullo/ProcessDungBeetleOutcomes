@@ -1,3 +1,19 @@
+# =============================================================================
+# Nature_Revision2 / 01_CombineDungBeetleDatasets.R
+# -----------------------------------------------------------------------------
+# I combine my raw Sabah dung beetle trap datasets, harmonise names with my
+# taxonomic backbone, and export one analysis-ready table for NR2.
+#
+# Inputs I read (main ones):
+#   - RawData/*.csv (Masters, Finlayson, Felicity/Trond, Slade, SAFE, Gianluca 2022, etc.)
+#   - Inputs/AllNamesBackbone.csv
+#   - Inputs/allHistoricSites.csv, Inputs/*GPS*.csv, plantation / structure CSVs as used below
+#   - Functions/DB_functions.R
+#
+# Outputs I write:
+#   - Outputs/NR2/rds/dungBeetlesForAbundanceAnalysis.csv
+# =============================================================================
+
 #31.05.2024
 #MASTER CODE FOR COMBINING ALL DUNG BEETLES DATASETS 
 

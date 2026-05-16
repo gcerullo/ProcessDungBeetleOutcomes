@@ -1,3 +1,28 @@
+# =============================================================================
+# Nature_Revision2 / 05_Nature_ProcessScenarioOutcomes.R
+# -----------------------------------------------------------------------------
+# I propagate my predicted abundances through delayed land-use scenarios, compute
+# 60-year landscape occupancy per draw, baselines against the starting landscape,
+# and relative occupancy.
+#
+# Inputs I read (main):
+#   - Inputs/ScenarioParams.R  (conversion factors, starting landscapes, etc.)
+#   - Inputs/MasterAllScenarios.rds
+#   - Inputs/ScenariosWithDelaysCSVs/*.csv
+#   - Outputs/NR2/rds/DBs_abundance_by_habAge_iterations.rds
+#   - Outputs/NR2/rds/DBsppCategories.rds
+#
+# Outputs I write (folder names may say _fastPilot in my current version — I
+# point everything under Outputs/NR2/rds/):
+#   - SL_occ60yr_perIteration.rds
+#   - Ab60perScenarioIteration(_fastPilot)/*.rds  (per-scenario occ60 lists)
+#   - RelativeAbundancePerIteration(_fastPilot)/OGbaseline_*.rds
+#   - BestScenarioUncertainty(_fastPilot)/*.rds
+#   - ScenarioAbundanceDelta_fastPilot/DeltaAbundance_*.rds  (per-draw deltas; NR2 ADD-ON block)
+#   - ScenarioAbundanceDelta_fastPilot/DeltaSpeciesSumm_*.rds (per-species mean + 80% delta; same loop)
+#   - MasterDBPerformance(_fastPilot).rds
+# =============================================================================
+
 #GC 17.06.24
 
 #Assess the dung beetle outcomes of different scenarios, where each scenario is disaggregated by age
@@ -676,10 +701,113 @@ for (w in seq_along(ab60files)){
   #save the output to an rds folder 
   saveRDS(best_scenario, file = best_scenario_file_path)
 }
-#This would be an example of paired scenario draws (ie based on the same model params)
-PairedExample <- occ_comb %>% filter(species == "Anoctus.laevis" & iteration == '459' & production_target == 0.39)
 
-x %>% filter(rel_occ == max(rel_occ))
+# =============================================================================
+# NR2 ADD-ON (optional): abundance deltas — does NOT change the BestScenario block above
+# -----------------------------------------------------------------------------
+# WHAT THIS BLOCK DOES (I wrote it to complement rel_occ ratios with raw differences):
+#
+# Inputs I reuse are ALREADY on the full-landscape scale used everywhere in this script:
+#   - `occ_60yr` in each Ab60 RDS = sum over years of `landscape_occ`, where
+#     landscape_occ = (habitat occupancy × points) summed over transitions, divided by
+#     `total_landscape_pts` (see function_scenario_60yr_uncertainty ~ lines 211–218).
+#   - `total_landscape_pts <- DB_CF * 1000` is set once from Inputs/ScenarioParams.R
+#     (`DB_CF` converts trap sampling area to planning units; ×1000 is points across the
+#     concession — same 1 Mha Yayasan Sabah framing as in ScenarioParams.R).
+#   - Starting-landscape SL values in SL_occ60yr_perIteration.rds come from the same
+#     processed_beetles × num_points logic and THE SAME total_landscape_pts denominator.
+#
+# SO: I am NOT recomputing abundance here — I only subtract two numbers that were built
+# with identical scaling. Delta inherits the same “per full landscape” interpretation as occ_60yr.
+#
+# TO KEEP THIS ALIGNED WITH THE MAIN PIPELINE YOU SHOULD:
+#   - Source the same Inputs/ScenarioParams.R (same DB_CF, same num_parcels interpretation).
+#   - Build Ab60 and SL RDS from this script without changing total_landscape_pts / merge logic.
+#   - Use the same processed_beetles RDS (DBs_abundance_by_habAge_iterations.rds) for SL as for scenarios.
+#   - Do not mix in occ_60yr recomputed elsewhere with a different denominator.
+#
+# TWO DELTA DEFINITIONS (same units as occ_60yr; paired by species + iteration):
+#   (1) delta_abundance_vs_all_primary — scenario cumulative signal minus SL when baseline
+#       is **all_primary** only (answers “change vs everywhere old-growth”).
+#   (2) delta_abundance_vs_scenario_start — minus SL for **your scenario’s scenarioStart**
+#       (answers “change vs starting mosaic for this scenario”, e.g. mostly 1L vs all_primary SL).
+#       When scenarioStart is all_primary, (1) and (2) use the same SL row.
+#
+# IN THE SAME for-LOOP BELOW I save two outputs per Ab60 file:
+#   • DeltaAbundance_<basename>.rds — full draw-level table (unchanged).
+#   • DeltaSpeciesSumm_<basename>.rds — for EACH delta definition, by (species, index,
+#     production_target): mean(delta across posterior iterations) + 80% equal-tailed
+#     uncertainty (10th & 90th percentiles across iterations). Same uncertainty style as rel_occ.
+# =============================================================================
+
+scenario_delta_folder <- file.path(nr2_rds_dir, "ScenarioAbundanceDelta_fastPilot")
+dir.create(scenario_delta_folder, recursive = TRUE, showWarnings = FALSE)
+
+# Lookup table A: all-primary SL only (one row per species × iteration).
+SL_lookup_all_primary <- SL_all_primary_dt %>%
+  dplyr::select(species, iteration, SL_occ_all_primary = SL_occ_60yr)
+
+# Lookup table B: SL for every scenarioStart I saved when I ran the SL loop (starting landscapes).
+SL_lookup_by_start <- SL_occ60_dt %>%
+  dplyr::rename(SL_occ_matching_scenario_start = SL_occ_60yr)
+
+# Which scenarioStart belongs to each (index, production_target)? From MasterAllScenarios composition.
+scen_start_lookup <- scenario_composition %>%
+  dplyr::distinct(index, production_target, scenarioStart)
+
+for (w in seq_along(ab60files)) {
+  # Same Ab60 files as BestScenario / rel_occ — each row is one scenario outcome draw.
+  occ60 <- readRDS(ab60files[[w]])
+  occ60_dt <- data.table::as.data.table(rbindlist(occ60))
+
+  # Attach scenarioStart per row so I can join the correct SL mosaic for definition (2).
+  occ60_dt <- occ60_dt %>%
+    dplyr::left_join(scen_start_lookup, by = c("index", "production_target"))
+
+  # Attach SL under all_primary baseline (definition (1)).
+  occ60_dt <- merge(
+    occ60_dt,
+    SL_lookup_all_primary,
+    by = c("species", "iteration"),
+    all.x = TRUE
+  )
+
+  # Attach SL for THIS row’s starting landscape type (definition (2)).
+  occ60_dt <- merge(
+    occ60_dt,
+    SL_lookup_by_start,
+    by = c("species", "iteration", "scenarioStart"),
+    all.x = TRUE
+  )
+
+  occ60_dt <- data.table::as.data.table(occ60_dt)
+  occ60_dt[, delta_abundance_vs_all_primary := occ_60yr - SL_occ_all_primary]
+  occ60_dt[, delta_abundance_vs_scenario_start := occ_60yr - SL_occ_matching_scenario_start]
+
+  # Per species × scenario keys × delta definition: mean(delta) + 80% ET interval across draws.
+  delta_species_summ <- occ60_dt %>%
+    tidyr::pivot_longer(
+      cols = c(delta_abundance_vs_all_primary, delta_abundance_vs_scenario_start),
+      names_to = "delta_definition",
+      values_to = "delta_draw"
+    ) %>%
+    dplyr::group_by(species, index, production_target, delta_definition) %>%
+    dplyr::summarise(
+      mean_delta = mean(delta_draw, na.rm = TRUE),
+      q10_delta = stats::quantile(delta_draw, 0.10, na.rm = TRUE),
+      q90_delta = stats::quantile(delta_draw, 0.90, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    remove_specific_species()
+
+  out_name <- paste0("DeltaAbundance_", basename(ab60files[[w]]))
+  summ_name <- paste0("DeltaSpeciesSumm_", basename(ab60files[[w]]))
+  saveRDS(occ60_dt, file = file.path(scenario_delta_folder, out_name))
+  saveRDS(delta_species_summ, file = file.path(scenario_delta_folder, summ_name))
+
+  cat("Saved:", out_name, "|", summ_name, "\n")
+}
+
 
 ###################################################
 

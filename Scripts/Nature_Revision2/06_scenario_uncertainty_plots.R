@@ -1,3 +1,22 @@
+# =============================================================================
+# Nature_Revision2 / 06_scenario_uncertainty_plots.R
+# -----------------------------------------------------------------------------
+# I plot how often logging vs plantation scenarios “win” per species (from my
+# BestScenario outputs), faceted by species category — losers, intermediate 1L,
+# and all species chunks.
+#
+# Inputs I read:
+#   - Outputs/NR2/rds/BestScenarioUncertainty(_fastPilot)/*.rds
+#        (I set selected_file_index in the script to pick one scenario file)
+#   - Outputs/NR2/rds/DBsppCategories.rds
+#
+# Outputs I write:
+#   - Outputs/NR2/figures/loser_dungbeetle_uncertainty_plot.pdf/.png
+#   - Outputs/NR2/figures/int1lgrp_dungbeetle_uncertainty_plot.pdf/.png
+#   - Outputs/NR2/figures/all_sp_uncertainty_plot.pdf/.png
+#   - Outputs/NR2/figures/all_sp_chunk1.pdf/.png, all_sp_chunk2.pdf/.png
+# =============================================================================
+
 #Build figure of uncertainty for whether plantations or logging are better for each each species 
 
 #NOTES: 
